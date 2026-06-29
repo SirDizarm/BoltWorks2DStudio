@@ -4830,7 +4830,8 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   }
 
   function busApproachProgress(bus) {
-    if (game?.blockedBusId === bus.id) return 0;
+    const state = game?.scriptState?.[bus.id];
+    if (game?.blockedBusId === bus.id && !state?.runningOverPlayer) return 0;
     return rawBusApproachProgress(bus);
   }
 
@@ -4995,7 +4996,6 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
         game.scriptErrors[object.id] = object.scriptError;
       }
     });
-    if (!game.playerKnockedDown) { game.playerHidden = false; game.hospitalized = false; }
   }
   function updateBusHazards() {
     if (!playing || !game || game.dialogue || game.hospitalized) return;
@@ -5039,7 +5039,10 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       if (game.elapsed - game.blockStartedAt >= (Number(bus.busRunOverAfter) || 7)) {
         game.playerKnockedDown = true;
         game.playerFallStartedAt = game.elapsed;
-        setTimeout(() => { if (game) game.playerHidden = true; }, 420);
+        state.runningOverPlayer = true;
+        state.drivePastStartedAt = game.elapsed;
+        state.departed = true;
+        setTimeout(() => { if (game?.playerKnockedDown) game.playerHidden = true; }, 420);
         startBusDepart(bus, state);
         setTimeout(() => sendPlayerToScene(bus.busRunOverSceneId || "hospital", "You wake up at the hospital."), 950);
         game.blockedBusId = null;
@@ -5056,11 +5059,12 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     let engineActive = false;
     for (const bus of buses) {
       const state = game?.scriptState?.[bus.id];
-      if (!state?.departed && !Number.isFinite(state?.drivePastStartedAt)) continue;
+      const departed = !!state?.departed || Number.isFinite(state?.drivePastStartedAt);
       const progress = rawBusApproachProgress(bus);
-      if (progress >= 0 && progress < 1) {
+      if (!departed || (progress >= 0 && progress < 1)) {
         engineActive = true;
-        if (Math.random() < dt * 14) spawnBusWheelGust(bus, false);
+        if (departed && Math.random() < dt * 14) spawnBusWheelGust(bus, false);
+        if (busEngineAudio?.paused) playBusEngine(bus.engineSound || "soundAssets/bus_idle.mp3");
       }
     }
     updateBusParticles(dt);
@@ -5086,7 +5090,6 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       updateBusHazards();
       updateBusEffects(dt);
     }
-    if (!game.playerKnockedDown) { game.playerHidden = false; game.hospitalized = false; }
     const { width } = resizeCanvas(gameCanvas);
     const viewport = width;
     game.cameraX = clamp(game.x - viewport * .38, 0, Math.max(0, project.world.width - viewport));
@@ -5114,7 +5117,6 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     ctx.restore();
   }
   function drawPlayer(ctx, x, groundY, now) {
-    if (game.playerHidden && !game.playerKnockedDown) game.playerHidden = false;
     if (game.playerHidden) return;
     const scaleY = gameCanvas.height / project.world.height;
     ctx.save();
