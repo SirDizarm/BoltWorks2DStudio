@@ -4238,8 +4238,9 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     for (const bus of sceneObjects().filter(o => o.type === "bus" && o.visible !== false)) {
       const st = stateForBus(bus), progress = rawBusProgress(bus);
       if (st.departed || Number.isFinite(st.startedAt)) { startBus(bus); if (blockedBusId === bus.id) { blockedBusId = null; blockStartedAt = 0; honkBusId = null; } continue; }
-      if (progress < 0 || progress >= 1) continue;
+      if (progress < 0) continue;
       if (!playerBlocksBus(bus)) { if (blockedBusId === bus.id) { blockedBusId = null; blockStartedAt = 0; honkBusId = null; } startBus(bus); continue; }
+      if (progress >= 1 && blockedBusId !== bus.id) continue;
       if (blockedBusId !== bus.id) { blockedBusId = bus.id; blockStartedAt = elapsed; lastHornAt = -999; }
       honk(bus);
       if (elapsed - blockStartedAt >= (Number(bus.busRunOverAfter) || 7)) { blockedBusId = null; forceBusRunOver(bus); blockStartedAt = 0; honkBusId = null; setTimeout(() => goToScene("hospital", "You wake up at the hospital."), 900); }
@@ -5013,7 +5014,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
         continue;
       }
 
-      if (progress < 0 || progress >= 1) continue;
+      if (progress < 0) continue;
       const inLane = playerBlocksBus(bus);
       if (!inLane) {
         startBusDepart(bus, state);
@@ -5021,6 +5022,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
         if (game.honkBusId === bus.id) { game.honkBusId = null; game.honkUntil = 0; game.honkFlashUntil = 0; }
         continue;
       }
+      if (progress >= 1 && game.blockedBusId !== bus.id) continue;
 
       if (game.blockedBusId !== bus.id) {
         game.blockedBusId = bus.id;
