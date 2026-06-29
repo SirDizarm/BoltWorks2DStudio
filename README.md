@@ -17,7 +17,7 @@ The active rebuild is now the modular HTML/JavaScript editor in:
 
 The first goal is to recreate the best parts of the original single-file HTML prototype, but split into small maintainable modules instead of one giant JavaScript file.
 
-The C# WinForms rebuild remains in `src/` as an experiment/reference, but the web rebuild is currently the preferred direction because the image/canvas workflows fit the editor better and are faster to iterate on.
+The C# WinForms experiment has been removed. BoltWorks Studio is now focused on the modular web editor, with the preserved legacy editor kept as a working reference while features are migrated.
 
 ## Run the modular web editor
 

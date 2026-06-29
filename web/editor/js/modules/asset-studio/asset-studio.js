@@ -1,7 +1,7 @@
 ﻿window.BoltWorks = window.BoltWorks || {};
 BoltWorks.AssetStudio = (() => {
   const title = 'Asset Studio';
-  const view = { shelf: 'all', query: '', bgColor: { r: 128, g: 136, b: 128 }, tolerance: 28, removeMode: 'global', removePreview: true, trim: true, selection: null, pickingBg: false, copiedSelection: null };
+  const view = { shelf: 'all', query: '', bgColor: { r: 128, g: 136, b: 128 }, tolerance: 28, removeMode: 'global', removePreview: true, trim: true, selection: null, pickingBg: false, copiedSelection: null, pasteFlipX: false, pasteFlipY: false };
   const filteredAssets = () => {
     const p = BoltWorks.State.getProject();
     return p.assets.filter(a => (view.shelf === 'all' || a.shelf === view.shelf) && (!view.query || a.name.toLowerCase().includes(view.query.toLowerCase())));
@@ -21,7 +21,7 @@ BoltWorks.AssetStudio = (() => {
       <div class="toolbar"><button id="selectToolBtn" class="active">Select</button><button id="pickBgBtn">Pick background color</button><label style="min-width:230px">Remove mode<select id="removeModeSelect"><option value="global" ${view.removeMode==='global'?'selected':''}>Global color / old tolerance</option><option value="outside" ${view.removeMode==='outside'?'selected':''}>Outside connected color only</option></select></label><label class="row" style="width:auto"><input id="removePreviewCheck" type="checkbox" ${view.removePreview?'checked':''}> Preview removal</label><label class="row" style="width:auto"><input id="trimCheck" type="checkbox" ${view.trim?'checked':''}> Trim transparent edges</label></div>
       <div class="slider-row"><span>Tolerance</span><input id="toleranceSlider" type="range" min="0" max="140" value="${view.tolerance}"><input id="toleranceNumber" type="number" value="${view.tolerance}"></div>
       <div class="row wrap" style="margin-bottom:12px"><span class="small">Background color</span><span id="bgSwatch" style="display:inline-block;width:34px;height:24px;border:1px solid var(--line);background:rgb(${view.bgColor.r},${view.bgColor.g},${view.bgColor.b})"></span><button id="makeTransparentCopyBtn" class="accent">Create transparent copy</button><button id="applyTransparentBtn">Apply to this asset</button><button id="downloadTransparentBtn">Download transparent PNG</button></div>
-      <div class="row wrap" style="margin-bottom:12px"><strong style="color:var(--accent-2)">Selected sprite</strong><label style="width:90px">X<input id="selX" type="number" value="${view.selection?.x ?? ''}"></label><label style="width:90px">Y<input id="selY" type="number" value="${view.selection?.y ?? ''}"></label><label style="width:90px">W<input id="selW" type="number" value="${view.selection?.w ?? ''}"></label><label style="width:90px">H<input id="selH" type="number" value="${view.selection?.h ?? ''}"></label><button id="saveSelectionBtn" class="accent">Save selection to library</button><button id="copySelectionBtn">Copy selection</button><button id="pasteSelectionBtn" ${view.copiedSelection?'':'disabled'}>Paste copied selection</button><button id="downloadSelectionBtn">Download selected PNG</button></div>
+      <div class="row wrap" style="margin-bottom:12px"><strong style="color:var(--accent-2)">Selected sprite</strong><label style="width:90px">X<input id="selX" type="number" value="${view.selection?.x ?? ''}"></label><label style="width:90px">Y<input id="selY" type="number" value="${view.selection?.y ?? ''}"></label><label style="width:90px">W<input id="selW" type="number" value="${view.selection?.w ?? ''}"></label><label style="width:90px">H<input id="selH" type="number" value="${view.selection?.h ?? ''}"></label><button id="saveSelectionBtn" class="accent">Save selection to library</button><button id="copySelectionBtn">Copy selection</button><button id="pasteSelectionBtn" ${view.copiedSelection?'':'disabled'}>Paste copied selection</button><label class="row" style="width:auto"><input id="pasteFlipX" type="checkbox" ${view.pasteFlipX?'checked':''}> Flip H</label><label class="row" style="width:auto"><input id="pasteFlipY" type="checkbox" ${view.pasteFlipY?'checked':''}> Flip V</label><button id="downloadSelectionBtn">Download selected PNG</button></div>
       <div class="asset-canvas-wrap checker"><canvas id="assetCanvas"></canvas></div>
       <p class="canvas-note">Drag a rectangle around a sprite. Tip: copy a selected part, switch assets, then draw/select where it should paste.</p>
     </div>`;
@@ -73,7 +73,11 @@ BoltWorks.AssetStudio = (() => {
     ctx.drawImage(base, 0, 0);
     const x = view.selection ? view.selection.x : Math.round((base.width - pasted.width) / 2);
     const y = view.selection ? view.selection.y : Math.round((base.height - pasted.height) / 2);
-    ctx.drawImage(pasted, x, y);
+    ctx.save();
+    ctx.translate(x + (view.pasteFlipX ? pasted.width : 0), y + (view.pasteFlipY ? pasted.height : 0));
+    ctx.scale(view.pasteFlipX ? -1 : 1, view.pasteFlipY ? -1 : 1);
+    ctx.drawImage(pasted, 0, 0);
+    ctx.restore();
     const dataUrl = canvas.toDataURL('image/png');
     BoltWorks.State.updateAsset(asset.id, { dataUrl, width: canvas.width, height: canvas.height, editedAt: new Date().toISOString() });
   };
@@ -107,10 +111,13 @@ BoltWorks.AssetStudio = (() => {
     BoltWorks.$('#applyTransparentBtn')?.addEventListener('click', async()=>{ const id=BoltWorks.State.getProject().selectedAssetId; const d=await transparentData(); const meta=await BoltWorks.ImageUtils.canvasToAssetData(d); BoltWorks.State.updateAsset(id,{dataUrl:d,width:meta.width,height:meta.height}); BoltWorks.Shell.render(); });
     BoltWorks.$('#downloadTransparentBtn')?.addEventListener('click', async()=>{ const d=await transparentData(); if(d) BoltWorks.downloadDataUrl('transparent.png', d); });
     BoltWorks.$('#downloadAssetBtn')?.addEventListener('click',()=>{ const a=BoltWorks.State.assetById(BoltWorks.State.getProject().selectedAssetId); if(a) BoltWorks.downloadDataUrl(a.name, a.dataUrl); });
-    ['selX','selY','selW','selH'].forEach(id=>BoltWorks.$('#'+id)?.addEventListener('change',()=>{ view.selection={ x:Number(BoltWorks.$('#selX').value)||0, y:Number(BoltWorks.$('#selY').value)||0, w:Number(BoltWorks.$('#selW').value)||1, h:Number(BoltWorks.$('#selH').value)||1 }; drawAsset(); }));
+    ['selX','selY','selW','selH'].forEach(id=>BoltWorks.$('#'+id)?.addEventListener('change',()=>{ view.selection={ x:Number(BoltWorks.$('#selX').value)||0, y:Number(BoltWorks.$('#selY').value)||0, w:Number(BoltWorks.$('#selW').value)||1, h:Number(BoltWorks.$('#selH').value)||1 }; drawAsset(); }));
+
     BoltWorks.$('#saveSelectionBtn')?.addEventListener('click', async()=>{ const a=BoltWorks.State.assetById(BoltWorks.State.getProject().selectedAssetId); if(!a||!view.selection) return alert('Select a sprite area first.'); const src=await selectionSourceData(); const d=await BoltWorks.ImageUtils.cropDataUrl(src, view.selection.x, view.selection.y, view.selection.w, view.selection.h); await saveDataAsAsset(`${a.name.replace(/\.[^.]+$/,'')}_sprite.png`, d, a.shelf); BoltWorks.Shell.render(); });
     BoltWorks.$('#copySelectionBtn')?.addEventListener('click', async()=>{ const copied=await copySelectionData(); if(!copied) return alert('Select a sprite area first.'); view.copiedSelection=copied; BoltWorks.Shell.setStatus(`Copied ${copied.width} x ${copied.height}px from ${copied.sourceName}.`); BoltWorks.Shell.render(); });
-    BoltWorks.$('#pasteSelectionBtn')?.addEventListener('click', async()=>{ if(!view.copiedSelection) return; await pasteCopiedSelection(); BoltWorks.Shell.setStatus('Pasted copied selection into current asset.'); BoltWorks.Shell.render(); });
+    BoltWorks.$('#pasteSelectionBtn')?.addEventListener('click', async()=>{ if(!view.copiedSelection) return; await pasteCopiedSelection(); const flipped = [view.pasteFlipX ? 'horizontal' : '', view.pasteFlipY ? 'vertical' : ''].filter(Boolean).join(' + '); BoltWorks.Shell.setStatus(flipped ? `Pasted copied selection flipped ${flipped}.` : 'Pasted copied selection into current asset.'); BoltWorks.Shell.render(); });
+    BoltWorks.$('#pasteFlipX')?.addEventListener('change', e=>{ view.pasteFlipX = e.target.checked; });
+    BoltWorks.$('#pasteFlipY')?.addEventListener('change', e=>{ view.pasteFlipY = e.target.checked; });
     BoltWorks.$('#downloadSelectionBtn')?.addEventListener('click', async()=>{ const a=BoltWorks.State.assetById(BoltWorks.State.getProject().selectedAssetId); if(!a||!view.selection) return; const src=await selectionSourceData(); const d=await BoltWorks.ImageUtils.cropDataUrl(src, view.selection.x, view.selection.y, view.selection.w, view.selection.h); BoltWorks.downloadDataUrl('selected-sprite.png', d); });
     const canvas = BoltWorks.$('#assetCanvas');
     if (canvas) {

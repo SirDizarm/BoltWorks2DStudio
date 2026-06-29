@@ -107,6 +107,8 @@
   let assetPreviewCache = null;
   let assetStatusMessage = "";
   let copiedAssetSprite = null;
+  let pasteCopiedFlipX = false;
+  let pasteCopiedFlipY = false;
   let characterState = "standing";
   let characterFrameIndex = 0;
   let selectedCharacterPart = "torso";
@@ -1130,6 +1132,8 @@
     $("#downloadSelectedSprite").disabled = !assetSelection;
     if ($("#copySelectedSprite")) $("#copySelectedSprite").disabled = !assetSelection;
     if ($("#pasteCopiedSprite")) $("#pasteCopiedSprite").disabled = !copiedAssetSprite;
+    if ($("#pasteFlipX")) $("#pasteFlipX").disabled = !copiedAssetSprite;
+    if ($("#pasteFlipY")) $("#pasteFlipY").disabled = !copiedAssetSprite;
     $("#keepSelectionPixels").disabled = !assetSelection;
     $("#eraseSelectionPixels").disabled = !assetSelection;
     ["selectionX", "selectionY", "selectionW", "selectionH"].forEach(id => { $(`#${id}`).disabled = !assetSelection; });
@@ -2099,6 +2103,8 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   $("#extractAsset").onclick = extractSelectedAsset;
   if ($("#copySelectedSprite")) $("#copySelectedSprite").onclick = copySelectedSprite;
   if ($("#pasteCopiedSprite")) $("#pasteCopiedSprite").onclick = pasteCopiedSprite;
+  if ($("#pasteFlipX")) $("#pasteFlipX").onchange = event => { pasteCopiedFlipX = event.target.checked; };
+  if ($("#pasteFlipY")) $("#pasteFlipY").onchange = event => { pasteCopiedFlipY = event.target.checked; };
   $("#downloadSelectedSprite").onclick = downloadSelectedSprite;
   function makeSelectedSpriteCanvas(image) {
     if (!image?.naturalWidth || !assetSelection) return null;
@@ -2171,11 +2177,15 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       ctx.drawImage(image, 0, 0);
       const x = assetSelection ? assetSelection.x : Math.round((canvas.width - pasteImage.naturalWidth) / 2);
       const y = assetSelection ? assetSelection.y : Math.round((canvas.height - pasteImage.naturalHeight) / 2);
-      ctx.drawImage(pasteImage, x, y);
+      ctx.save();
+      ctx.translate(x + (pasteCopiedFlipX ? pasteImage.naturalWidth : 0), y + (pasteCopiedFlipY ? pasteImage.naturalHeight : 0));
+      ctx.scale(pasteCopiedFlipX ? -1 : 1, pasteCopiedFlipY ? -1 : 1);
+      ctx.drawImage(pasteImage, 0, 0);
+      ctx.restore();
       const src = canvas.toDataURL("image/png");
       asset.src = src;
       asset.name = `${asset.name.replace(/\.[^.]+$/, "")}.png`;
-      asset.backgroundRemoved = { ...(asset.backgroundRemoved || {}), pastedSprite: { sourceAssetId: copiedAssetSprite.sourceAssetId, sourceName: copiedAssetSprite.sourceName, x, y, width: copiedAssetSprite.width, height: copiedAssetSprite.height, appliedAt: Date.now() } };
+      asset.backgroundRemoved = { ...(asset.backgroundRemoved || {}), pastedSprite: { sourceAssetId: copiedAssetSprite.sourceAssetId, sourceName: copiedAssetSprite.sourceName, x, y, width: copiedAssetSprite.width, height: copiedAssetSprite.height, flipX: pasteCopiedFlipX, flipY: pasteCopiedFlipY, appliedAt: Date.now() } };
       const replacement = new Image();
       replacement.onload = refreshAssetViews;
       replacement.src = src;
@@ -2183,7 +2193,8 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       assetPreviewCache = null;
       assetSelection = { x, y, w: copiedAssetSprite.width, h: copiedAssetSprite.height };
       renderAssets();
-      updateSelectionDetails(`Pasted ${copiedAssetSprite.width} x ${copiedAssetSprite.height}px into "${asset.name}" at ${x}, ${y}.`);
+      const flipped = [pasteCopiedFlipX ? "horizontal" : "", pasteCopiedFlipY ? "vertical" : ""].filter(Boolean).join(" + ");
+      updateSelectionDetails(`Pasted ${copiedAssetSprite.width} x ${copiedAssetSprite.height}px${flipped ? ` flipped ${flipped}` : ""} into "${asset.name}" at ${x}, ${y}.`);
       renderRig();
       renderCharacterAnimator();
       markDirty();
