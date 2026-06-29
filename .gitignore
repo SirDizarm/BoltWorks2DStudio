@@ -1,0 +1,18 @@
+# BoltWorks Studio local/generated files
+*.zip
+*.bak
+*.backup
+*.codex_recovered_backup
+*.tmp
+*.log
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Node/dependency folders if added later
+node_modules/
+dist/
+build/
