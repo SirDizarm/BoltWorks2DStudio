@@ -2937,18 +2937,36 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   }
 
 
+  function deleteCharacterGuideAt(index) {
+    const guides = characterGuides();
+    if (index < 0 || index >= guides.length) return;
+    pushCharacterUndo("Delete guide line");
+    const [removed] = guides.splice(index, 1);
+    if (removed?.id === selectedCharacterGuideId) selectedCharacterGuideId = null;
+    renderCharacterGuides();
+    drawCharacterPreview();
+    markDirty();
+  }
+
   function renderCharacterGuides() {
     const list = $("#characterGuideList");
     if (!list) return;
     const guides = characterGuides();
     list.innerHTML = guides.length ? guides.map((guide, index) => {
       const label = guide.axis === "x" ? `V${index + 1} X` : `H${index + 1} Y`;
-      return `<div class="character-guide-row ${guide.id === selectedCharacterGuideId ? "selected" : ""}" data-guide-id="${guide.id}">
+      return `<div class="character-guide-row ${guide.id === selectedCharacterGuideId ? "selected" : ""}" data-guide-id="${guide.id}" data-guide-index="${index}">
         <strong>${label}</strong>
         <input type="number" min="0" max="${guide.axis === "x" ? project.character.width : project.character.height}" value="${Math.round(Number(guide.value) || 0)}" data-guide-value="${guide.id}">
-        <button data-delete-guide="${guide.id}">Del</button>
+        <button type="button" data-delete-guide-index="${index}">Del</button>
       </div>`;
     }).join("") : `<p class="hint">No guides yet. Add a vertical or horizontal guide.</p>`;
+    list.querySelectorAll("[data-delete-guide-index]").forEach(button => {
+      button.onclick = event => {
+        event.preventDefault();
+        event.stopPropagation();
+        deleteCharacterGuideAt(Number(button.dataset.deleteGuideIndex));
+      };
+    });
   }
   function characterGuideAt(point) {
     if (!characterShowGuides) return null;
@@ -3386,13 +3404,6 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     markDirty();
   };
   if ($("#characterGuideList")) $("#characterGuideList").onclick = event => {
-    const deleteButton = event.target.closest("[data-delete-guide]");
-    if (deleteButton) {
-      pushCharacterUndo("Delete guide line");
-      project.character.guides = characterGuides().filter(guide => guide.id !== deleteButton.dataset.deleteGuide);
-      if (selectedCharacterGuideId === deleteButton.dataset.deleteGuide) selectedCharacterGuideId = null;
-      renderCharacterGuides(); drawCharacterPreview(); markDirty(); return;
-    }
     const row = event.target.closest("[data-guide-id]");
     if (row) { selectedCharacterGuideId = row.dataset.guideId; renderCharacterGuides(); drawCharacterPreview(); }
   };
