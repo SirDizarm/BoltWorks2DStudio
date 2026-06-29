@@ -1890,6 +1890,39 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       y: clamp(Math.round((event.clientY - rect.top) * assetPreview.height / rect.height), 0, assetPreview.height - 1)
     };
   }
+  function findVisiblePixelBounds(image) {
+    if (!image?.naturalWidth) return null;
+    const source = transparencyPreview ? makeTransparentAssetCanvas(image, false) : image;
+    const canvas = document.createElement("canvas");
+    canvas.width = source.width || source.naturalWidth;
+    canvas.height = source.height || source.naturalHeight;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(source, 0, 0);
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let minX = canvas.width, minY = canvas.height, maxX = -1, maxY = -1;
+    for (let y = 0; y < canvas.height; y++) {
+      for (let x = 0; x < canvas.width; x++) {
+        if (data[(y * canvas.width + x) * 4 + 3] > 5) {
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x);
+          maxY = Math.max(maxY, y);
+        }
+      }
+    }
+    if (maxX < minX || maxY < minY) return null;
+    return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+  }
+  function selectVisibleSpriteBounds() {
+    const image = images.get(selectedAssetId);
+    const bounds = findVisiblePixelBounds(image);
+    if (!bounds) {
+      alert("No visible pixels found. If the asset still has a solid background, enable background-removal preview first.");
+      return;
+    }
+    setAssetSelection(bounds, `Selected visible image: ${bounds.w} x ${bounds.h}px at ${bounds.x}, ${bounds.y}.`);
+  }
   function clampAssetSelection(selection, image = images.get(selectedAssetId)) {
     if (!selection || !image?.naturalWidth) return null;
     const x = clamp(Math.round(selection.x), 0, image.naturalWidth - 1);
@@ -2100,6 +2133,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       });
     });
   });
+  if ($("#selectVisibleSprite")) $("#selectVisibleSprite").onclick = selectVisibleSpriteBounds;
   $("#extractAsset").onclick = extractSelectedAsset;
   if ($("#copySelectedSprite")) $("#copySelectedSprite").onclick = copySelectedSprite;
   if ($("#pasteCopiedSprite")) $("#pasteCopiedSprite").onclick = pasteCopiedSprite;
