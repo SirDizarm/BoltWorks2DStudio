@@ -116,6 +116,7 @@
   let characterZoom = 1;
   let characterDrag = null;
   let characterShowGuides = true;
+  let selectedCharacterGuideId = null;
   const characterUndoStack = [];
   let characterTransformClipboard = null;
   let characterShowBendGuides = true;
@@ -2898,29 +2899,57 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     const guides = characterGuides();
     if (!guides.length) return;
     ctx.save();
-    ctx.lineWidth = Math.max(1, 1 / Math.max(.5, characterZoom));
-    ctx.setLineDash([6, 4]);
-    ctx.font = "10px sans-serif";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 4]);
+    ctx.font = "bold 11px sans-serif";
     guides.forEach((guide, index) => {
       const value = Number(guide.value) || 0;
-      ctx.strokeStyle = guide.axis === "x" ? "rgba(97, 214, 255, .9)" : "rgba(255, 209, 90, .9)";
-      ctx.fillStyle = ctx.strokeStyle;
+      const selected = guide.id === selectedCharacterGuideId;
+      const color = selected ? "#ff4f4f" : guide.axis === "x" ? "#48d8ff" : "#ffd15a";
+      ctx.strokeStyle = "rgba(0,0,0,.85)";
+      ctx.lineWidth = selected ? 5 : 4;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      if (guide.axis === "x") { ctx.moveTo(value, 0); ctx.lineTo(value, project.character.height); }
+      else { ctx.moveTo(0, value); ctx.lineTo(project.character.width, value); }
+      ctx.stroke();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = selected ? 3 : 2;
+      ctx.setLineDash([8, 4]);
       ctx.beginPath();
       if (guide.axis === "x") {
         ctx.moveTo(value, 0);
         ctx.lineTo(value, project.character.height);
         ctx.stroke();
-        ctx.fillText(`V${index + 1}`, value + 3, 12);
+        ctx.fillStyle = color;
+        ctx.fillRect(value - 5, 4, 10, 10);
+        ctx.fillText(`V${index + 1} x=${Math.round(value)}`, value + 7, 14);
       } else {
         ctx.moveTo(0, value);
         ctx.lineTo(project.character.width, value);
         ctx.stroke();
-        ctx.fillText(`H${index + 1}`, 4, value - 4);
+        ctx.fillStyle = color;
+        ctx.fillRect(4, value - 5, 10, 10);
+        ctx.fillText(`H${index + 1} y=${Math.round(value)}`, 18, value - 7);
       }
     });
     ctx.restore();
   }
 
+
+  function renderCharacterGuides() {
+    const list = $("#characterGuideList");
+    if (!list) return;
+    const guides = characterGuides();
+    list.innerHTML = guides.length ? guides.map((guide, index) => {
+      const label = guide.axis === "x" ? `V${index + 1} X` : `H${index + 1} Y`;
+      return `<div class="character-guide-row ${guide.id === selectedCharacterGuideId ? "selected" : ""}" data-guide-id="${guide.id}">
+        <strong>${label}</strong>
+        <input type="number" min="0" max="${guide.axis === "x" ? project.character.width : project.character.height}" value="${Math.round(Number(guide.value) || 0)}" data-guide-value="${guide.id}">
+        <button data-delete-guide="${guide.id}">Del</button>
+      </div>`;
+    }).join("") : `<p class="hint">No guides yet. Add a vertical or horizontal guide.</p>`;
+  }
   function characterGuideAt(point) {
     if (!characterShowGuides) return null;
     const threshold = Math.max(4, 8 / Math.max(.5, characterZoom));
@@ -2937,7 +2966,9 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     pushCharacterUndo("Add guide line");
     characterGuides().push({ id: uid(), axis: axis === "y" ? "y" : "x", value: axis === "y" ? Math.round(project.character.height / 2) : Math.round(project.character.width / 2) });
     characterShowGuides = true;
+    selectedCharacterGuideId = characterGuides()[characterGuides().length - 1].id;
     if ($("#showCharacterGuides")) $("#showCharacterGuides").checked = true;
+    renderCharacterGuides();
     drawCharacterPreview();
     markDirty();
   }
@@ -2945,7 +2976,9 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   function deleteLastCharacterGuide() {
     if (!project.character || !characterGuides().length) return;
     pushCharacterUndo("Delete guide line");
-    characterGuides().pop();
+    const removed = characterGuides().pop();
+    if (removed?.id === selectedCharacterGuideId) selectedCharacterGuideId = null;
+    renderCharacterGuides();
     drawCharacterPreview();
     markDirty();
   }
@@ -2962,6 +2995,8 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     characterCtx.lineTo(characterCanvas.width, characterCanvas.height - 22);
     characterCtx.stroke();
     paintCharacterFrame(characterCtx, currentCharacterFrame(), 0, 0, true);
+    drawCharacterGuides(characterCtx);
+    renderCharacterGuides();
     characterCtx.save();
     characterCtx.fillStyle = "rgba(11, 14, 10, .72)";
     characterCtx.fillRect(8, 8, 112, 24);
@@ -3345,8 +3380,30 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     if (!characterGuides().length) return;
     pushCharacterUndo("Clear guide lines");
     project.character.guides = [];
+    selectedCharacterGuideId = null;
+    renderCharacterGuides();
     drawCharacterPreview();
     markDirty();
+  };
+  if ($("#characterGuideList")) $("#characterGuideList").onclick = event => {
+    const deleteButton = event.target.closest("[data-delete-guide]");
+    if (deleteButton) {
+      pushCharacterUndo("Delete guide line");
+      project.character.guides = characterGuides().filter(guide => guide.id !== deleteButton.dataset.deleteGuide);
+      if (selectedCharacterGuideId === deleteButton.dataset.deleteGuide) selectedCharacterGuideId = null;
+      renderCharacterGuides(); drawCharacterPreview(); markDirty(); return;
+    }
+    const row = event.target.closest("[data-guide-id]");
+    if (row) { selectedCharacterGuideId = row.dataset.guideId; renderCharacterGuides(); drawCharacterPreview(); }
+  };
+  if ($("#characterGuideList")) $("#characterGuideList").oninput = event => {
+    const input = event.target.closest("[data-guide-value]");
+    if (!input) return;
+    const guide = characterGuides().find(item => item.id === input.dataset.guideValue);
+    if (!guide) return;
+    guide.value = clamp(+input.value || 0, 0, guide.axis === "x" ? project.character.width : project.character.height);
+    selectedCharacterGuideId = guide.id;
+    drawCharacterPreview(); markDirty();
   };
   $("#partFlip").onchange = event => {
     pushCharacterUndo(`${prettyPart[selectedCharacterPart]} flip`);
@@ -3464,6 +3521,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     const guide = characterGuideAt(point);
     if (guide) {
       pushCharacterUndo("Move guide line");
+      selectedCharacterGuideId = guide.id;
       characterDrag = { mode: "guide", guideId: guide.id, axis: guide.axis };
       characterCanvas.setPointerCapture(event.pointerId);
       return;

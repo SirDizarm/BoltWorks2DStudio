@@ -489,3 +489,29 @@ button.danger { color: #ffc2b9; border-color: #6b3932; }
   margin: 0;
   text-align: center;
 }
+.character-guide-list {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 6px;
+  max-height: 150px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px;
+  background: rgba(0, 0, 0, .16);
+}
+
+.character-guide-row {
+  display: grid;
+  grid-template-columns: 70px 1fr 44px;
+  gap: 6px;
+  align-items: center;
+}
+
+.character-guide-row strong {
+  color: var(--accent);
+}
+
+.character-guide-row input {
+  min-width: 0;
+}
