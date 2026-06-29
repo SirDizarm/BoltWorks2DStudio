@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -49,7 +49,7 @@
         <button id="addLayer" class="full quiet">+ Add layer</button>
 
         <h2>Scene art slots</h2>
-        <p class="hint">To use your own art: go to Assets, import/select an image, come back here, choose the scene part, then press �Use selected asset here�.</p>
+        <p class="hint">To use your own art: go to Assets, import/select an image, come back here, choose the scene part, then press “Use selected asset here”.</p>
         <label>Scene part
           <select id="sceneArtSlot">
             <option value="background">Background</option>
@@ -340,12 +340,13 @@
           <div class="transparency-tools">
             <label class="check"><input id="transparentBackground" type="checkbox" checked> Preview background removal</label>
             <button id="pickBackground">Pick background color</button>
+            <label>Remove mode<select id="backgroundRemoveMode"><option value="global">Global color / old tolerance</option><option value="outside">Outside connected color only</option></select></label>
             <label class="color-field">Color<input id="backgroundColor" type="color" value="#9a9e91"></label>
             <label class="tolerance-field">Tolerance <span id="toleranceValue">28</span>
               <input id="colorTolerance" type="range" min="0" max="150" value="28">
             </label>
           </div>
-          <p class="extract-help">Pick the background color and adjust tolerance until the checkerboard looks clean. This is a preview until you use one of the save actions below. Extracted sprite selections are always saved with the previewed transparency.</p>
+          <p class="extract-help">Pick the background color and adjust tolerance until the checkerboard looks clean. Global mode removes matching pixels everywhere. Outside connected mode only removes matching pixels connected to the image edge, protecting same-color pixels inside the object. This is a preview until you use one of the save actions below.</p>
           <div id="transparencyNotice" class="transparency-notice preview-only">
             <strong>Preview only</strong>
             <span>The current saved asset is still unchanged. Placing or downloading it will include its original background.</span>
@@ -573,10 +574,10 @@
         </label>
         <div class="nudge-pad" aria-label="Nudge shoe/end piece">
           <span>Shoe/end arrows</span>
-          <button data-part-nudge="shoe" data-dx="0" data-dy="-1">↑</button>
-          <button data-part-nudge="shoe" data-dx="-1" data-dy="0">←</button>
-          <button data-part-nudge="shoe" data-dx="1" data-dy="0">→</button>
-          <button data-part-nudge="shoe" data-dx="0" data-dy="1">↓</button>
+          <button data-part-nudge="shoe" data-dx="0" data-dy="-1">â†‘</button>
+          <button data-part-nudge="shoe" data-dx="-1" data-dy="0">â†</button>
+          <button data-part-nudge="shoe" data-dx="1" data-dy="0">â†’</button>
+          <button data-part-nudge="shoe" data-dx="0" data-dy="1">â†“</button>
         </div>
         <label>Finger/toe move X <span id="partToeMoveXValue">0px</span>
           <input id="partToeMoveX" type="range" min="-120" max="120" value="0">
@@ -586,10 +587,10 @@
         </label>
         <div class="nudge-pad" aria-label="Nudge finger/toe piece">
           <span>Finger/toe arrows</span>
-          <button data-part-nudge="toe" data-dx="0" data-dy="-1">↑</button>
-          <button data-part-nudge="toe" data-dx="-1" data-dy="0">←</button>
-          <button data-part-nudge="toe" data-dx="1" data-dy="0">→</button>
-          <button data-part-nudge="toe" data-dx="0" data-dy="1">↓</button>
+          <button data-part-nudge="toe" data-dx="0" data-dy="-1">â†‘</button>
+          <button data-part-nudge="toe" data-dx="-1" data-dy="0">â†</button>
+          <button data-part-nudge="toe" data-dx="1" data-dy="0">â†’</button>
+          <button data-part-nudge="toe" data-dx="0" data-dy="1">â†“</button>
         </div>
         <label class="check"><input id="partShowBendGuides" type="checkbox" checked> Show bend/cut markings</label>
         <div class="transform-buttons">
@@ -751,6 +752,7 @@
   <script src="editor.js"></script>
 </body>
 </html>
+
 
 
 

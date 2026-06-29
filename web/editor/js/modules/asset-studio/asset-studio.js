@@ -1,7 +1,7 @@
 ﻿window.BoltWorks = window.BoltWorks || {};
 BoltWorks.AssetStudio = (() => {
   const title = 'Asset Studio';
-  const view = { shelf: 'all', query: '', bgColor: { r: 128, g: 136, b: 128 }, tolerance: 28, removePreview: true, trim: true, selection: null, pickingBg: false };
+  const view = { shelf: 'all', query: '', bgColor: { r: 128, g: 136, b: 128 }, tolerance: 28, removeMode: 'global', removePreview: true, trim: true, selection: null, pickingBg: false };
   const filteredAssets = () => {
     const p = BoltWorks.State.getProject();
     return p.assets.filter(a => (view.shelf === 'all' || a.shelf === view.shelf) && (!view.query || a.name.toLowerCase().includes(view.query.toLowerCase())));
@@ -18,12 +18,12 @@ BoltWorks.AssetStudio = (() => {
     const asset = BoltWorks.State.assetById(BoltWorks.State.getProject().selectedAssetId);
     if (!asset) return `<div class="empty">Import or select an asset to begin.</div>`;
     return `<div class="stage-card">
-      <div class="toolbar"><button id="selectToolBtn" class="active">Select</button><button id="pickBgBtn">Pick background color</button><label class="row" style="width:auto"><input id="removePreviewCheck" type="checkbox" ${view.removePreview?'checked':''}> Preview removal</label><label class="row" style="width:auto"><input id="trimCheck" type="checkbox" ${view.trim?'checked':''}> Trim transparent edges</label></div>
+      <div class="toolbar"><button id="selectToolBtn" class="active">Select</button><button id="pickBgBtn">Pick background color</button><label style="min-width:230px">Remove mode<select id="removeModeSelect"><option value="global" ${view.removeMode==='global'?'selected':''}>Global color / old tolerance</option><option value="outside" ${view.removeMode==='outside'?'selected':''}>Outside connected color only</option></select></label><label class="row" style="width:auto"><input id="removePreviewCheck" type="checkbox" ${view.removePreview?'checked':''}> Preview removal</label><label class="row" style="width:auto"><input id="trimCheck" type="checkbox" ${view.trim?'checked':''}> Trim transparent edges</label></div>
       <div class="slider-row"><span>Tolerance</span><input id="toleranceSlider" type="range" min="0" max="140" value="${view.tolerance}"><input id="toleranceNumber" type="number" value="${view.tolerance}"></div>
       <div class="row wrap" style="margin-bottom:12px"><span class="small">Background color</span><span id="bgSwatch" style="display:inline-block;width:34px;height:24px;border:1px solid var(--line);background:rgb(${view.bgColor.r},${view.bgColor.g},${view.bgColor.b})"></span><button id="makeTransparentCopyBtn" class="accent">Create transparent copy</button><button id="applyTransparentBtn">Apply to this asset</button><button id="downloadTransparentBtn">Download transparent PNG</button></div>
       <div class="row wrap" style="margin-bottom:12px"><strong style="color:var(--accent-2)">Selected sprite</strong><label style="width:90px">X<input id="selX" type="number" value="${view.selection?.x ?? ''}"></label><label style="width:90px">Y<input id="selY" type="number" value="${view.selection?.y ?? ''}"></label><label style="width:90px">W<input id="selW" type="number" value="${view.selection?.w ?? ''}"></label><label style="width:90px">H<input id="selH" type="number" value="${view.selection?.h ?? ''}"></label><button id="saveSelectionBtn" class="accent">Save selection to library</button><button id="downloadSelectionBtn">Download selected PNG</button></div>
       <div class="asset-canvas-wrap checker"><canvas id="assetCanvas"></canvas></div>
-      <p class="canvas-note">Drag a rectangle around a sprite. Use exact X/Y/W/H when pixels are hard to hit.</p>
+      <p class="canvas-note">Drag a rectangle around a sprite. Tip: after saving a single object, use Outside connected color only so matching gray pixels inside the object are protected.</p>
     </div>`;
   };
   const right = () => {
@@ -34,7 +34,7 @@ BoltWorks.AssetStudio = (() => {
   let dragStart = null;
   const drawAsset = async () => {
     const canvas = BoltWorks.$('#assetCanvas'); const asset = BoltWorks.State.assetById(BoltWorks.State.getProject().selectedAssetId); if (!canvas || !asset) return;
-    const src = view.removePreview ? await BoltWorks.ImageUtils.removeBackground(asset.dataUrl, view.bgColor, view.tolerance, false) : asset.dataUrl;
+    const src = view.removePreview ? await BoltWorks.ImageUtils.removeBackground(asset.dataUrl, view.bgColor, view.tolerance, false, view.removeMode) : asset.dataUrl;
     const img = await BoltWorks.loadImage(src);
     canvas.width = img.width; canvas.height = img.height;
     const ctx = canvas.getContext('2d', { willReadFrequently: true }); ctx.imageSmoothingEnabled = false; ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0);
@@ -42,7 +42,7 @@ BoltWorks.AssetStudio = (() => {
   };
   const transparentData = async () => {
     const asset = BoltWorks.State.assetById(BoltWorks.State.getProject().selectedAssetId); if (!asset) return null;
-    return BoltWorks.ImageUtils.removeBackground(asset.dataUrl, view.bgColor, view.tolerance, view.trim);
+    return BoltWorks.ImageUtils.removeBackground(asset.dataUrl, view.bgColor, view.tolerance, view.trim, view.removeMode);
   };
   const saveDataAsAsset = async (name, dataUrl, shelf = 'Working') => {
     const meta = await BoltWorks.ImageUtils.canvasToAssetData(dataUrl);
@@ -66,6 +66,7 @@ BoltWorks.AssetStudio = (() => {
     const syncTolerance = v => { view.tolerance = Number(v); const n=BoltWorks.$('#toleranceNumber'), s=BoltWorks.$('#toleranceSlider'); if(n) n.value=view.tolerance; if(s) s.value=view.tolerance; drawAsset(); };
     BoltWorks.$('#toleranceSlider')?.addEventListener('input', e=>syncTolerance(e.target.value));
     BoltWorks.$('#toleranceNumber')?.addEventListener('change', e=>syncTolerance(e.target.value));
+    BoltWorks.$('#removeModeSelect')?.addEventListener('change', e=>{view.removeMode=e.target.value; drawAsset();});
     BoltWorks.$('#removePreviewCheck')?.addEventListener('change', e=>{view.removePreview=e.target.checked; drawAsset();});
     BoltWorks.$('#trimCheck')?.addEventListener('change', e=>{view.trim=e.target.checked;});
     BoltWorks.$('#pickBgBtn')?.addEventListener('click',()=>{view.pickingBg=true; BoltWorks.Shell.setStatus('Click the image to pick a background color.');});
@@ -86,3 +87,4 @@ BoltWorks.AssetStudio = (() => {
   };
   return { title, left, center, right, afterRender };
 })();
+

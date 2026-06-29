@@ -1,4 +1,4 @@
-(() => {
+ï»¿(() => {
   "use strict";
 
   const $ = (selector) => document.querySelector(selector);
@@ -103,6 +103,7 @@
   let transparencyPreview = true;
   let backgroundRgb = { r: 154, g: 158, b: 145 };
   let colorTolerance = 28;
+  let backgroundRemoveMode = "global";
   let assetPreviewCache = null;
   let assetStatusMessage = "";
   let characterState = "standing";
@@ -975,6 +976,7 @@
     $("#assetZoomValue").textContent = `${Math.round(assetZoom * 100)}%`;
     $("#transparentBackground").checked = transparencyPreview;
     $("#backgroundColor").value = rgbToHex(backgroundRgb);
+    if ($("#backgroundRemoveMode")) $("#backgroundRemoveMode").value = backgroundRemoveMode;
     $("#colorTolerance").value = colorTolerance;
     $("#toleranceValue").textContent = colorTolerance;
     renderTransparencyNotice(asset);
@@ -1004,20 +1006,64 @@
     return { r: parseInt(hex.slice(1, 3), 16), g: parseInt(hex.slice(3, 5), 16), b: parseInt(hex.slice(5, 7), 16) };
   }
 
-  function removeBackgroundPixels(imageData) {
+  function backgroundColorDistance(pixels, index) {
+    const dr = pixels[index] - backgroundRgb.r;
+    const dg = pixels[index + 1] - backgroundRgb.g;
+    const db = pixels[index + 2] - backgroundRgb.b;
+    return Math.sqrt(dr * dr + dg * dg + db * db);
+  }
+
+  function removeGlobalBackgroundPixels(imageData) {
     const pixels = imageData.data;
     const feather = 12;
     for (let i = 0; i < pixels.length; i += 4) {
-      const dr = pixels[i] - backgroundRgb.r;
-      const dg = pixels[i + 1] - backgroundRgb.g;
-      const db = pixels[i + 2] - backgroundRgb.b;
-      const distance = Math.sqrt(dr * dr + dg * dg + db * db);
+      const distance = backgroundColorDistance(pixels, i);
       if (distance <= colorTolerance) pixels[i + 3] = 0;
       else if (distance < colorTolerance + feather) pixels[i + 3] = Math.round(pixels[i + 3] * (distance - colorTolerance) / feather);
     }
     return imageData;
   }
 
+  function removeOutsideConnectedBackgroundPixels(imageData) {
+    const pixels = imageData.data;
+    const width = imageData.width;
+    const height = imageData.height;
+    const visited = new Uint8Array(width * height);
+    const queue = [];
+    const enqueue = (x, y) => {
+      if (x < 0 || y < 0 || x >= width || y >= height) return;
+      const pixelIndex = y * width + x;
+      if (visited[pixelIndex]) return;
+      const dataIndex = pixelIndex * 4;
+      if (pixels[dataIndex + 3] === 0 || backgroundColorDistance(pixels, dataIndex) <= colorTolerance) {
+        visited[pixelIndex] = 1;
+        queue.push(pixelIndex);
+      }
+    };
+    for (let x = 0; x < width; x++) {
+      enqueue(x, 0);
+      enqueue(x, height - 1);
+    }
+    for (let y = 1; y < height - 1; y++) {
+      enqueue(0, y);
+      enqueue(width - 1, y);
+    }
+    for (let read = 0; read < queue.length; read++) {
+      const pixelIndex = queue[read];
+      const x = pixelIndex % width;
+      const y = Math.floor(pixelIndex / width);
+      pixels[pixelIndex * 4 + 3] = 0;
+      enqueue(x + 1, y);
+      enqueue(x - 1, y);
+      enqueue(x, y + 1);
+      enqueue(x, y - 1);
+    }
+    return imageData;
+  }
+
+  function removeBackgroundPixels(imageData) {
+    return backgroundRemoveMode === "outside" ? removeOutsideConnectedBackgroundPixels(imageData) : removeGlobalBackgroundPixels(imageData);
+  }
   function applyTransparency(imageData) {
     return transparencyPreview ? removeBackgroundPixels(imageData) : imageData;
   }
@@ -1034,11 +1080,11 @@
   }
 
   function transparencyMetadata() {
-    return { color: rgbToHex(backgroundRgb), tolerance: colorTolerance, appliedAt: Date.now() };
+    return { color: rgbToHex(backgroundRgb), tolerance: colorTolerance, mode: backgroundRemoveMode, appliedAt: Date.now() };
   }
 
   function processedAssetCanvas(asset, image) {
-    const key = `${asset.id}:${transparencyPreview}:${backgroundRgb.r},${backgroundRgb.g},${backgroundRgb.b}:${colorTolerance}:${image.naturalWidth}x${image.naturalHeight}`;
+    const key = `${asset.id}:${transparencyPreview}:${backgroundRemoveMode}:${backgroundRgb.r},${backgroundRgb.g},${backgroundRgb.b}:${colorTolerance}:${image.naturalWidth}x${image.naturalHeight}`;
     if (assetPreviewCache?.key === key) return assetPreviewCache.canvas;
     const canvas = document.createElement("canvas");
     canvas.width = image.naturalWidth;
@@ -1995,6 +2041,12 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   };
   $("#transparentBackground").onchange = event => {
     transparencyPreview = event.target.checked;
+    assetPreviewCache = null;
+    renderTransparencyNotice(project.assets.find(asset => asset.id === selectedAssetId));
+    drawAssetPreview();
+  };
+  if ($("#backgroundRemoveMode")) $("#backgroundRemoveMode").onchange = event => {
+    backgroundRemoveMode = event.target.value === "outside" ? "outside" : "global";
     assetPreviewCache = null;
     renderTransparencyNotice(project.assets.find(asset => asset.id === selectedAssetId));
     drawAssetPreview();
@@ -4138,7 +4190,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   <canvas id="game"></canvas>
   <div class="hud"><strong>${escapeHtml(projectData.name || "BoltWorks Game")}</strong><span id="sceneName"></span><span id="clock">07:00</span></div>
   <div id="dialogue" class="dialogue"></div>
-  <div class="hint">Move: A/D or arrows · Interact: E / Space / Enter · Crawl: C / Down</div>
+  <div class="hint">Move: A/D or arrows Â· Interact: E / Space / Enter Â· Crawl: C / Down</div>
   <div class="mobile"><div><button data-key="ArrowLeft">?</button><button data-key="ArrowRight">?</button></div><div><button data-key="KeyE">E</button></div></div>
   <script id="boltworks-data" type="application/json">${gameData}</script>
   <script>
@@ -4324,7 +4376,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     for (const layer of visibleLayers()) { ctx.save(); const off = cameraX*(layer.parallax||1); ctx.translate(-off,0); drawLayerBackdrop(layer,cameraX,viewportW); sceneObjects().filter(o => o.layer === layer.id && !o.alwaysOnTop).forEach(drawObject); ctx.restore(); }
     for (const layer of visibleLayers()) { ctx.save(); const off = cameraX*(layer.parallax||1); ctx.translate(-off,0); sceneObjects().filter(o => o.layer === layer.id && o.alwaysOnTop).forEach(drawObject); ctx.restore(); }
     ctx.save(); ctx.translate(-cameraX,0); particles.forEach(p => { const t=clamp(p.age/p.life,0,1); ctx.globalAlpha=(1-t)*.42; ctx.fillStyle="#d8c99e"; ctx.beginPath(); ctx.ellipse(p.x,p.y,p.size*(1+t),p.size*.45,0,0,Math.PI*2); ctx.fill(); }); drawPlayer(); ctx.restore(); ctx.restore();
-    document.getElementById("sceneName").textContent = (scene().name || "Scene") + (near ? " · E: " + (near.prompt || near.name || "Interact") : "");
+    document.getElementById("sceneName").textContent = (scene().name || "Scene") + (near ? " Â· E: " + (near.prompt || near.name || "Interact") : "");
     const minutes = Math.floor(7*60 + elapsed*8); document.getElementById("clock").textContent = String(Math.floor(minutes/60)%24).padStart(2,"0") + ":" + String(minutes%60).padStart(2,"0") + "  $" + cash;
   }
   function loop(now){ const dt=Math.min(.04,(now-last)/1000||0); last=now; elapsed+=dt; update(dt); draw(); requestAnimationFrame(loop); }
@@ -5254,6 +5306,9 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     }
   }).catch(() => {});
 })();
+
+
+
 
 
 
