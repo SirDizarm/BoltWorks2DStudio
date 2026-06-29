@@ -1,6 +1,18 @@
-# Scrapyard Story Builder
+# BoltWorks Studio
 
-A dependency-free, browser-based editor and playable prototype for a left/right side-scrolling life and salvage game.
+![BoltWorks Studio logo](branding/boltworks-studio-logo.png)
+
+**BoltWorks Studio** is a browser-based 2D game creation tool for building layered side-scroller story games from your own art.
+
+It is currently being built alongside the first game project, **Scrapyard Story**, but the editor itself is meant to be reusable for other 2D projects too.
+
+## What it does
+
+- **World editor:** build side-scrolling scenes with parallax layers, ground art, foreground art, props, buses, NPCs, gates, triggers, scene exits, and player-start markers.
+- **Asset Studio:** import large image sheets, remove backgrounds, cut selected areas into individual PNG assets, organize assets by shelf, and paint/erase/tweak textures.
+- **Character Animator:** assemble a player from layered body parts, animate standing/idle/walking/running/crawling/jumping/sitting, adjust layer order, bend shoes/hands/parts, export previews, and save character setups.
+- **Car / part builder:** assemble vehicles or objects from separate parts, then mark parts as removable with tool requirements, work time, break chance, and pay value.
+- **Object scripting and playtest:** test scenes directly in the browser with player movement, object scripts, sound, bus behavior, triggers, and scene changes.
 
 ## Run it
 
@@ -12,34 +24,32 @@ For the most reliable image importing, start a tiny local server from this folde
 python -m http.server 8080
 ```
 
-Then open `http://localhost:8080`.
+Then open:
 
-## Editor basics
-
-- **World:** choose a parallax layer and place buses, stops, cars, gates, workers, props, player starts, and triggers.
-- **Scene outliner:** every placed object and interaction appears in one searchable list. Click an item to select it and jump to its location; use the eye and delete buttons to hide or remove it. Anything beyond the playable bounds is marked **outside area**.
-- **Assets:** import PNG, WebP, JPEG, or GIF images. Open Asset Studio for a large preview, dimensions, usage information, renaming, replacing, deleting, and placing.
-- **Sprite sheets:** zoom into a large sheet and drag a box around one item. The eyedropper samples its background color; the tolerance slider removes a range of nearby colors. Extracting creates a separate, automatically trimmed transparent PNG while preserving the original sheet. You can also download the selected rectangle as an individual PNG without adding it to the project library.
-- **Background removal:** the checkerboard is initially a preview only. Use **Create transparent copy** to preserve the original, **Apply to this asset** to update the project asset and all placed uses of it, or **Download transparent PNG** to save a standalone processed image. Optional trimming removes empty transparent edges.
-- **Transforms:** selected scene objects can be rotated freely, turned in 90° steps, or flipped left/right from the Inspector.
-- **Character:** assign transparent body-part images to the six character layers. The playtest animates those layers procedurally for walking and crawling.
-- **Character Animator:** build separate standing, idle, walking, running, crawling, jumping, and sitting animations. Each animation has its own frame timeline. Assign an asset to a body layer, drag it on the preview, or edit its position, rotation, scale, and flip precisely.
-- **Animation export:** export the currently selected animation as a transparent horizontal PNG frame strip or an animated GIF at the chosen playback speed.
-- **Inspector:** select an object to edit its position, size, layer, interaction, reward, failure chance, or bus departure timing.
-- **Navigation:** mouse wheel pans; Ctrl + wheel zooms. `V`, `H`, and `T` select, pan, and draw triggers.
-- **Play scene:** use A/D or arrow keys, C/Down/Ctrl to crawl, and E/Space/Enter to interact. Touch controls appear on mobile.
+```text
+http://localhost:8080
+```
 
 ## Saving and asset storage
 
-- **Autosave:** the full working project is saved in the browser's IndexedDB database on the local hard drive. A smaller localStorage fallback is also attempted for compatibility.
-- **Save Project:** creates a portable `.scrapyard` project file in Downloads. Use **Open Project** to load it again.
-- Imported and extracted images are embedded in the project as image data, so a `.scrapyard` file contains its assets and can be moved to another computer.
-- Assets are not automatically written as separate files. Use **Download image** in Asset Studio when you want an individual PNG or source image on disk.
-- **Download saved image** downloads exactly what placement uses. **Download transparent PNG** applies the currently previewed color and tolerance without changing the project.
-- Browser autosave belongs to that browser profile and address. Keep `.scrapyard` files as durable backups.
+- **Autosave:** the working project is saved in the browser's local storage/IndexedDB on your hard drive.
+- **Save Project:** creates a portable `.boltworks` project file in Downloads.
+- **Open Project:** loads `.boltworks`, older `.scrapyard`, or JSON project files.
+- Imported and extracted images are embedded in the project data, so saved project files can be moved to another computer.
+- Assets are not automatically written as separate PNG files unless you choose a download/export action in Asset Studio.
 
-## Current prototype scope
+## Current status
 
-This first version includes the core scene editor, four parallax layers, asset importing, layered character animation, dialogue and salvage triggers, randomized part breakage, pay rewards, a clock, mobile controls, and a bus that drives away while shrinking into the distance.
+BoltWorks Studio is an early private work-in-progress. The editor already includes scene editing, asset cutting/background removal, texture painting, layered character animation, car/object part building, playtesting, sounds, and scripted bus behavior.
 
-It intentionally keeps the project data readable and portable. The next useful systems are multiple scenes (home, road, junkyard), schedules and day transitions, inventory/tools, sprite-sheet animation, room decoration, and a packaged desktop/mobile build.
+The next major areas are stronger object scripting, room/home decoration tools, inventory/tools, more scene/gameplay systems, and eventually AI-assisted scripting or scene editing.
+
+## License / rights
+
+Copyright (c) 2026 SirDizarm.
+
+All rights reserved.
+
+This project is private work-in-progress software. No permission is granted to copy, redistribute, sell, publish, sublicense, or reuse the code, art, branding, project files, or assets unless explicit written permission is given by the copyright holder.
+
+The license may change in the future if the project is released publicly or sold.

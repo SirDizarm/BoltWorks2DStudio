@@ -1,3 +1,16 @@
+.brand-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-icon {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 0 14px rgba(229, 159, 45, .18);
+}
 :root {
   --ink: #e9ecdf;
   --muted: #92998c;
