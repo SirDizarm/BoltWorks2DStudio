@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#141713">
+  <title>BoltWorks Studio</title>
+  <link rel="icon" type="image/png" href="branding/favicon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">S</span>
+      <div class="brand-title"><img src="branding/boltworks-icon-64.png" alt="" class="brand-icon"><div><strong>BoltWorks Studio</strong><small id="saveState">Saved locally</small></div></div>
+    </div>
+    <div class="top-actions">
+      <button id="newProject" class="quiet">New</button>
+      <button id="importProject" class="quiet">Open Project</button>
+      <button id="exportProject" class="quiet">Save Project</button>
+      <button id="exportGame" class="quiet">Export game</button>
+      <button id="playButton" class="play">Play scene</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="left-panel panel">
+      <div class="tabs">
+        <button class="tab active" data-tab="world">World</button>
+        <button class="tab" data-tab="assets">Assets</button>
+        <button class="tab" data-tab="character">Character</button>
+        <button class="tab" data-tab="cars">Cars</button>
+      </div>
+
+      <section class="tab-page active" id="worldPage">
+        <h2>Scenes</h2>
+        <label>Current scene<select id="sceneSelect"></select></label>
+        <div class="scene-art-actions">
+          <button id="addScene" class="full quiet">+ Add scene</button>
+          <button id="renameScene" class="full quiet">Rename scene</button>
+        </div>
+        <p class="hint">Objects and triggers belong to the current scene. Travel triggers can move the player to another scene.</p>
+        <button id="clearCurrentSceneObjects" class="full danger">Clear current scene objects</button>
+        <p class="hint">Use this when you want a blank scene and do not want the old starter bus, gate, NPC, or test triggers.</p>
+
+        <h2>Scene layers</h2>
+        <p class="hint">Items higher in the list are drawn in front.</p>
+        <div id="layerList" class="layer-list"></div>
+        <button id="addLayer" class="full quiet">+ Add layer</button>
+
+        <h2>Scene art slots</h2>
+        <p class="hint">To use your own art: go to Assets, import/select an image, come back here, choose the scene part, then press �Use selected asset here�.</p>
+        <label>Scene part
+          <select id="sceneArtSlot">
+            <option value="background">Background</option>
+            <option value="far">Far scenery</option>
+            <option value="ground">Ground</option>
+            <option value="front">Front scenery</option>
+            <option value="busStop">Bus stop</option>
+            <option value="bus">Bus rear view</option>
+          </select>
+        </label>
+        <div id="sceneArtPreview" class="scene-art-preview">No custom asset</div>
+        <div class="scene-art-actions">
+          <button id="assignSceneArt" class="full accent">Use selected asset here</button>
+          <button id="clearSceneArt" class="full quiet">Clear custom art</button>
+        </div>
+        <label>Draw mode
+          <select id="sceneArtMode">
+            <option value="stretch">Stretch to fit</option>
+            <option value="tile">Tile/repeat with spacing</option>
+          </select>
+        </label>
+        <label>Spacing between repeats <span id="sceneArtSpacingValue">0px</span>
+          <input id="sceneArtSpacing" type="range" min="0" max="500" step="5" value="0">
+        </label>
+        <label>Vertical offset <span id="sceneArtYOffsetValue">0px</span>
+          <input id="sceneArtYOffset" type="range" min="-400" max="400" step="5" value="0">
+        </label>
+        <label>Draw height <span id="sceneArtHeightValue">auto</span>
+          <input id="sceneArtHeight" type="range" min="0" max="720" step="5" value="0">
+        </label>
+
+        <h2>Quick objects</h2>
+        <div class="object-grid">
+          <button data-create="bus">Bus <span>Bus</span></button>
+          <button data-create="bus-stop">Stop <span>Bus stop</span></button>
+          <button data-create="car">Car <span>Junk car</span></button>
+          <button data-create="gate">Gate <span>Gate</span></button>
+          <button data-create="npc">NPC <span>Worker</span></button>
+          <button data-create="prop">Prop <span>Prop</span></button>
+          <button data-create="trigger">T<span>Trigger</span></button>
+          <button data-create="player_start_here">Start <span>player_start_here</span></button>
+        </div>
+
+        <div class="section-heading">
+          <h2>Scene outliner</h2>
+          <span id="objectCount">0 items</span>
+        </div>
+        <p class="hint">Every placed item is here - even if it is outside the current view.</p>
+        <input id="outlinerSearch" class="search-box" type="search" placeholder="Find objects or interactions...">
+        <div id="objectList" class="object-list"></div>
+
+        <h2>Scene</h2>
+        <label>World width <span id="worldWidthValue"></span>
+          <input id="worldWidth" type="range" min="1600" max="12000" step="100">
+        </label>
+        <label>Ground height <span id="groundValue"></span>
+          <input id="groundHeight" type="range" min="80" max="300">
+        </label>
+      </section>
+
+      <section class="tab-page" id="assetsPage">
+        <h2>Asset library</h2>
+        <p class="hint">PNG and WebP keep transparency. Import your images here, select one, then either place it in the scene, assign it to a selected object in the Inspector, or assign it to a Scene Art Slot on the World tab.</p>
+        <label>Show shelf
+          <select id="assetLibraryCategory">
+            <option value="working">Working assets</option>
+            <option value="world">World</option>
+            <option value="object">Objects</option>
+            <option value="part">Parts / car builder</option>
+            <option value="character">Character</option>
+            <option value="scene">Scenes</option>
+            <option value="inventory">Inventory items</option>
+            <option value="all">All assets</option>
+          </select>
+        </label>
+        <button id="openAssetStudio" class="full quiet"> Open Asset Studio</button>
+        <button id="addAssets" class="full accent">+ Import images</button>
+        <button id="placeSelectedAsset" class="full quiet">Place selected asset in scene</button>
+        <input id="assetFiles" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+        <div id="assetGrid" class="asset-grid"></div>
+      </section>
+
+      <section class="tab-page" id="characterPage">
+        <h2>Layered character</h2>
+        <p class="hint">Build standing, walking, crawling and other frame-by-frame layered animations.</p>
+        <button id="openCharacterAnimator" class="full accent">Open Character Animator</button>
+        <p class="hint">The quick rig below is still used as the default in the game preview.</p>
+        <label>Body layer
+          <select id="rigPart">
+            <option value="backArm">Back arm</option>
+            <option value="backLeg">Back leg</option>
+            <option value="torso">Torso</option>
+            <option value="head">Head</option>
+            <option value="frontLeg">Front leg</option>
+            <option value="frontArm">Front arm</option>
+          </select>
+        </label>
+        <button id="assignRig" class="full accent">Assign selected asset</button>
+        <button id="clearRig" class="full quiet">Clear this body layer</button>
+        <div id="rigSummary" class="rig-summary"></div>
+        <h2>Movement</h2>
+        <label>Walk speed <span id="speedValue"></span>
+          <input id="walkSpeed" type="range" min="100" max="500" step="10">
+        </label>
+        <label>Crawl speed <span id="crawlValue"></span>
+          <input id="crawlSpeed" type="range" min="50" max="250" step="10">
+        </label>
+      </section>
+      <section class="tab-page" id="carsPage">
+        <h2>Car / part models</h2>
+        <p class="hint">Build layered junk cars from chassis pieces, wheels, doors, engines and loose parts. Each removable part can store its needed tool and removal time.</p>
+        <button id="openCarBuilder" class="full accent">Open Car Part Builder</button>
+        <button id="newCarModelFromTab" class="full quiet">+ New car model</button>
+        <button id="placeCarModel" class="full quiet">Place selected car model in scene</button>
+        <div id="carModelList" class="object-list car-model-list"></div>
+      </section>
+    </aside>
+
+    <section class="stage-wrap">
+      <div class="stage-tools">
+        <div class="tool-group">
+          <button class="tool active" data-tool="select" title="Select (V)">Select</button>
+          <button class="tool" data-tool="pan" title="Pan (H)">Pan</button>
+          <button class="tool" data-tool="trigger" title="Draw trigger (T)">Trigger</button>
+        </div>
+        <span id="sceneInfo">Bus stop - 100%</span>
+        <div class="tool-group">
+          <button id="zoomOut" title="Zoom out">-</button>
+          <button id="zoomReset" title="Reset view">Home</button>
+          <button id="zoomIn" title="Zoom in">+</button>
+        </div>
+      </div>
+      <div id="canvasShell" class="canvas-shell">
+        <canvas id="editorCanvas" width="1280" height="720"></canvas>
+        <div id="emptyTip" class="empty-tip">
+          <strong>Build from left to right</strong>
+          <span>Place the bus stop, gate, cars and interaction triggers.</span>
+        </div>
+      </div>
+      <div class="timeline">
+        <span>0 m</span><div id="minimap"><div id="miniView"></div></div><span id="worldMetres">52 m</span>
+      </div>
+    </section>
+
+    <aside class="right-panel panel">
+      <div class="inspector-head"><h2>Inspector</h2><span id="selectionType">Nothing selected</span></div>
+      <div id="noSelection" class="no-selection">Select an item in the scene to edit it.</div>
+      <div id="inspector" hidden>
+        <label>Name<input id="objName" type="text"></label>
+        <div class="field-row">
+          <label>X<input id="objX" type="number"></label>
+          <label>Y<input id="objY" type="number"></label>
+        </div>
+        <div class="field-row">
+          <label>Width<input id="objW" type="number" min="10"></label>
+          <label>Height<input id="objH" type="number" min="10"></label>
+        </div>        <label>Layer<select id="objLayer"></select></label>
+        <label class="check"><input id="objAlwaysOnTop" type="checkbox"> Always on top of scene layers</label>
+        <label class="check"><input id="objLocked" type="checkbox"> Locked / do not move in editor</label>
+        <label>Opacity <span id="objOpacityValue">100%</span><input id="objOpacity" type="range" min="0" max="100" step="1" value="100"></label>
+        <label>Blend mode
+          <select id="objBlendMode">
+            <option value="source-over">Normal</option>
+            <option value="multiply">Multiply / darker blend</option>
+            <option value="screen">Screen / lighter blend</option>
+            <option value="overlay">Overlay</option>
+            <option value="soft-light">Soft light</option>
+          </select>
+        </label>
+        <div class="transform-buttons object-order-buttons">
+          <button id="sendObjectBackward" title="Draw this object one step farther back">Move back</button>
+          <button id="bringObjectForward" title="Draw this object one step closer/front">Move forward</button>
+          <button id="sendObjectToBack" title="Draw first in its group">Send back</button>
+          <button id="bringObjectToFront" title="Draw last in its group">Send front</button>
+        </div>
+        <div id="transformFields">
+          <label>Rotation <span id="rotationValue">0 deg</span>
+            <input id="objRotation" type="range" min="-180" max="180" step="1">
+          </label>
+          <div class="transform-buttons">
+            <button id="rotateLeft" title="Rotate 90 deg left">Left 90 deg</button>
+            <button id="rotateRight" title="Rotate 90 deg right">Right 90 deg</button>
+            <button id="flipObject" title="Flip left/right"> Flip</button>
+          </div>
+        </div>
+        <div id="triggerFields" hidden>
+          <h2>Interaction</h2>
+          <label>Action
+            <select id="triggerAction">
+              <option value="dialogue">Show dialogue</option>
+              <option value="salvage">Salvage car part</option>
+              <option value="travel">Travel / change scene</option>
+              <option value="sleep">Sleep</option>
+              <option value="eat">Eat</option>
+            </select>
+          </label>
+          <label>Prompt<input id="triggerPrompt" type="text" placeholder="Press E to interact"></label>
+          <label>Dialogue<textarea id="triggerDialogue" rows="4"></textarea></label>
+          <label>Duration in seconds<input id="triggerDuration" type="number" min="0" step="0.5"></label>
+          <label>Break chance <span id="breakValue"></span>
+            <input id="triggerBreak" type="range" min="0" max="100">
+          </label>
+          <label>Good-condition pay<input id="triggerReward" type="number" min="0"></label>
+          <label>Target scene<select id="triggerTargetScene"></select></label>
+          <label>Target spawn X<input id="triggerTargetX" type="number" min="0" step="10"></label>
+        </div>
+        <div id="busFields" hidden>
+          <h2>Bus motion script</h2>
+          <p class="hint">This is the editable script for how the bus drives toward the screen, passes by, then disappears. If the player blocks it, it honks for 7 seconds first.</p>
+          <label>Wait before leaving (seconds)<input id="busDelay" type="number" min="0" step="0.5"></label>
+          <label>Drive-away time (seconds)<input id="busDuration" type="number" min="0.1" step="0.5"></label>
+          <label>Start scale / distance <span id="busStartScaleValue">59%</span><input id="busStartScale" type="range" min="5" max="150" step="1"></label>
+          <label>Drive-past scale <span id="busEndScaleValue">100%</span><input id="busEndScale" type="range" min="50" max="300" step="1"></label>
+          <label>X drift while leaving <span id="busDriftXValue">0px</span><input id="busDriftX" type="range" min="-1000" max="1000" step="10"></label>
+          <label>Y lift while leaving <span id="busDriftYValue">0px</span><input id="busDriftY" type="range" min="-600" max="600" step="10"></label>
+          <label>Scale anchor
+            <select id="busAnchor">
+              <option value="bottom">Bottom / wheels stay on ground</option>
+              <option value="center">Center</option>
+            </select>
+          </label>
+          <pre id="busScriptPreview" class="script-preview"></pre>
+          <div class="script-actions">
+            <button id="viewObjectScript" class="quiet">Script viewer</button>
+            <button id="editObjectScript" class="quiet">Edit script</button>
+          </div>
+          <textarea id="objectScriptEditor" class="script-editor" rows="12" spellcheck="false" hidden></textarea>
+          <div id="scriptEditActions" class="script-actions" hidden>
+            <button id="applyObjectScript" class="accent">Apply script</button>
+            <button id="copyObjectScript" class="quiet">Copy script</button>
+          </div>
+          <p id="scriptStatus" class="hint"></p>
+        </div>
+        <h2>Object art</h2>
+        <p id="objectAssetSummary" class="hint">No custom object asset.</p>
+        <button id="assignObjectAsset" class="full accent">Use selected asset for this object</button>
+        <button id="clearObjectAsset" class="full quiet">Clear object asset</button>
+        <label class="check"><input id="objFlip" type="checkbox"> Flipped left/right</label>
+        <div class="inspector-actions">
+          <button id="duplicateObject" class="quiet">Duplicate</button>
+          <button id="deleteObject" class="danger">Delete</button>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <section id="assetStudio" class="asset-studio" aria-hidden="true">
+    <header class="studio-header">
+      <div>
+        <strong>Asset Studio</strong>
+        <span>Inspect and manage every imported image</span>
+      </div>
+      <div class="studio-actions">
+        <button id="studioImport" class="accent">+ Import images</button>
+        <button id="closeAssetStudio">Close</button>
+      </div>
+    </header>
+    <div class="studio-layout">
+      <aside class="studio-library">
+        <input id="assetSearch" class="search-box" type="search" placeholder="Search assets...">
+        <label>Studio shelf
+          <select id="assetStudioCategory">
+            <option value="all">All assets</option>
+            <option value="working">Working assets</option>
+            <option value="world">World</option>
+            <option value="object">Objects</option>
+            <option value="part">Parts / car builder</option>
+            <option value="character">Character</option>
+            <option value="scene">Scenes</option>
+            <option value="inventory">Inventory items</option>
+          </select>
+        </label>
+        <div id="studioAssetGrid" class="studio-asset-grid"></div>
+      </aside>
+      <main class="asset-workbench">
+        <div id="assetStudioEmpty" class="asset-studio-empty">
+          <strong>No asset selected</strong>
+          <span>Choose an asset on the left, or import a new image.</span>
+        </div>
+        <div id="assetEditor" hidden>
+          <div class="extract-toolbar">
+            <label>Zoom <span id="assetZoomValue">50%</span>
+              <input id="assetZoom" type="range" min="10" max="1600" value="50" step="10">
+            </label>
+            <button id="fitAsset">Fit sheet</button>
+            <button id="clearAssetSelection">Clear selection</button>
+          </div>
+          <div class="transparency-tools">
+            <label class="check"><input id="transparentBackground" type="checkbox" checked> Preview background removal</label>
+            <button id="pickBackground">Pick background color</button>
+            <label class="color-field">Color<input id="backgroundColor" type="color" value="#9a9e91"></label>
+            <label class="tolerance-field">Tolerance <span id="toleranceValue">28</span>
+              <input id="colorTolerance" type="range" min="0" max="150" value="28">
+            </label>
+          </div>
+          <p class="extract-help">Pick the background color and adjust tolerance until the checkerboard looks clean. This is a preview until you use one of the save actions below. Extracted sprite selections are always saved with the previewed transparency.</p>
+          <div id="transparencyNotice" class="transparency-notice preview-only">
+            <strong>Preview only</strong>
+            <span>The current saved asset is still unchanged. Placing or downloading it will include its original background.</span>
+          </div>
+          <div class="transparency-save-actions">
+            <label class="check"><input id="trimTransparentAsset" type="checkbox" checked> Trim empty transparent edges</label>
+            <button id="createTransparentCopy" class="accent">Create transparent copy</button>
+            <button id="applyTransparencyAsset">Apply to this asset</button>
+            <button id="downloadTransparentAsset">Download transparent PNG</button>
+          </div>
+          <div class="sprite-selection-actions">
+            <strong>Selected sprite</strong>
+            <span id="selectionDetails" class="selection-details">No sprite selected yet.</span>
+            <div class="selection-number-grid">
+              <label>X<input id="selectionX" type="number" min="0" step="1" disabled></label>
+              <label>Y<input id="selectionY" type="number" min="0" step="1" disabled></label>
+              <label>W<input id="selectionW" type="number" min="1" step="1" disabled></label>
+              <label>H<input id="selectionH" type="number" min="1" step="1" disabled></label>
+            </div>
+            <button id="extractAsset" class="accent" disabled>Save selection to library</button>
+            <button id="downloadSelectedSprite" disabled>Download selected PNG</button>
+          </div>
+          <div class="pixel-edit-actions">
+            <strong>Delete pixels</strong>
+            <span>Uses the selected rectangle and saves real transparency into this project asset.</span>
+            <button id="keepSelectionPixels" disabled>Keep only selection</button>
+            <button id="eraseSelectionPixels" class="danger" disabled>Erase inside selection</button>
+          </div>
+          <div class="paint-tools">
+            <strong>Texture paint</strong>
+            <span>Paint directly onto this asset. Use Select when you want the crop box again.</span>
+            <div class="paint-row">
+              <button id="paintSelectTool" class="active">Select</button>
+              <button id="paintPenTool">Pen</button>
+              <button id="paintBrushTool">Brush</button>
+              <button id="paintSprayTool">Spray</button>
+              <button id="paintEraseTool">Erase</button>
+              <label>Color <input id="paintColor" type="color" value="#ffd15a"></label><button id="pickPaintColor" title="Pick paint color from the asset">Pick from image</button>
+            </div>
+            <div class="paint-row">
+              <label>Size <span id="paintSizeValue">8px</span><input id="paintSize" type="range" min="1" max="80" value="8"></label>
+              <label>Opacity <span id="paintOpacityValue">100%</span><input id="paintOpacity" type="range" min="1" max="100" value="100"></label>
+              <label>Spray tolerance <span id="paintSprayToleranceValue">20</span><input id="paintSprayTolerance" type="range" min="0" max="100" value="20"></label>
+              <button id="paintUndo" disabled>Undo paint</button>
+              <button id="paintSave" disabled>Save paint changes</button>
+              <button id="paintDiscard" class="danger" disabled>Discard paint changes</button>
+            </div>
+          </div>
+          <div class="asset-preview-scroll">
+            <div class="asset-preview-wrap"><canvas id="assetPreview" width="1" height="1"></canvas></div>
+          </div>
+          <div class="asset-editor-fields">
+            <label>Asset name<input id="assetName" type="text"></label>
+            <label>Asset shelf
+              <select id="assetCategory">
+                <option value="working">Working assets</option>
+                <option value="world">World</option>
+                <option value="object">Objects</option>
+                <option value="part">Parts / car builder</option>
+                <option value="character">Character</option>
+                <option value="scene">Scenes</option>
+                <option value="inventory">Inventory items</option>
+              </select>
+            </label>
+            <div id="assetDetails" class="asset-details"></div>
+            <div class="asset-editor-actions">
+              <button id="replaceAsset" class="quiet">Replace image</button>
+              <button id="downloadAsset" class="quiet">Download saved image</button>
+              <button id="placeAsset" class="accent">Place saved asset</button>
+              <button id="deleteAsset" class="danger">Delete this asset from project</button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <input id="replaceAssetFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+  </section>
+
+  <section id="characterAnimator" class="character-animator" aria-hidden="true">
+    <header class="studio-header">
+      <div>
+        <strong>Character Animator</strong>
+        <span>Layer body parts, pose frames, preview movement, and export</span>
+      </div>
+      <div class="studio-actions">
+        <button id="undoCharacterEdit">Undo</button>
+        <button id="exportAnimationSheet" class="accent">Export PNG sheet</button>
+        <button id="exportAnimationWebm" class="accent">Export WebM</button>
+        <button id="exportAnimationHtml" class="accent">Export HTML preview</button>
+        <button id="exportAnimationGif" class="accent">Export GIF</button>
+        <button id="saveCharacterBackup">Save character backup</button>
+        <button id="loadCharacterBackup">Load character backup</button>
+        <input id="characterBackupFile" type="file" accept=".boltchar,.json,.scrap-character,application/json" hidden>
+        <button id="closeCharacterAnimator">Close</button>
+      </div>
+    </header>
+    <div class="animator-layout">
+      <aside class="animator-left">
+        <h2>Animation</h2>
+        <select id="animationState"></select>
+        <button id="addCharacterAnimation" class="full quiet">+ Add animation</button>
+        <input id="animationFacing" type="hidden" value="right">
+        <p id="animationFacingHint" class="hint">Animator is right-facing only. In playtest the game mirrors the whole character when walking left.</p>
+        <label>Playback speed <span id="animationFpsValue">8 fps</span>
+          <input id="animationFps" type="range" min="1" max="20" value="8">
+        </label>
+        <label>Loop mode
+          <select id="animationLoopMode">
+            <option value="normal">Normal: 1,2,3,4</option>
+            <option value="pingpong">Ping-pong: 1,2,3,4,3,2</option>
+          </select>
+        </label>
+        <h2>Copy timeline</h2>
+        <label>Copy frames from
+          <select id="copyAnimationSource"></select>
+        </label>
+        <button id="copyAnimationTimeline" class="full quiet">Copy into current animation</button>
+        <p class="hint">Copies the whole frame list, facing direction, loop mode, and speed into the selected animation.</p>
+        <h2>Body layers</h2>
+        <div id="animatorPartList" class="animator-part-list"></div>
+        <h2>Asset picker</h2>
+        <input id="characterAssetSearch" class="search-box" type="search" placeholder="Find extracted body parts...">
+        <label class="check"><input id="showCharacterSourceSheets" type="checkbox"> Show large/source sheets</label>
+        <div id="characterAssetGrid" class="character-asset-grid"></div>
+        <button id="importCharacterAsset" class="full quiet">Import body-part image</button>
+        <button id="assignCharacterAsset" class="full accent">Assign selected asset</button>
+        <label class="check"><input id="assignAllCharacterFrames" type="checkbox" checked> Apply to every frame in this animation</label>
+        <button id="resetCharacterPose" class="full quiet">Reset pose layout</button>
+        <button id="clearCharacterPart" class="full quiet">Clear body layer</button>
+      </aside>
+
+      <main class="animator-center">
+        <div class="animator-stage">
+          <canvas id="characterCanvas" width="256" height="320"></canvas>
+        </div>
+        <div class="character-zoom-controls">
+          <button id="characterZoomOut">-</button>
+          <label>Zoom <span id="characterZoomValue">100%</span><input id="characterZoom" type="range" min="50" max="500" value="100"></label>
+          <button id="characterZoomIn">+</button>
+          <button id="characterZoomReset">100%</button>
+        </div>
+        <div class="character-guide-controls">
+          <label class="check"><input id="showCharacterGuides" type="checkbox" checked> Show guide lines</label>
+          <button id="addVerticalGuide">+ Vertical guide</button>
+          <button id="addHorizontalGuide">+ Horizontal guide</button>
+          <button id="deleteNearestGuide">Delete last guide</button>
+          <button id="clearCharacterGuides">Clear guides</button>
+          <div id="characterGuideList" class="character-guide-list"></div>
+          <p class="hint">Click a guide in the list, type its exact position, or drag the bright handle/line directly in the preview.</p>
+        </div>
+        <div class="playback-controls">
+          <button id="previousCharacterFrame">&lt;</button>
+          <button id="playCharacterAnimation" class="accent">Preview</button>
+          <button id="nextCharacterFrame">&gt;</button>
+          <span id="characterFrameLabel">Frame 1 / 1</span>
+        </div>
+        <div id="characterTimeline" class="character-timeline"></div>
+        <div class="frame-actions">
+          <button id="addCharacterFrame">+ New frame</button>
+          <button id="duplicateCharacterFrame">Duplicate frame</button>
+          <button id="moveCharacterFrameBack">Move frame back</button>
+          <button id="moveCharacterFrameForward">Move frame forward</button>
+          <button id="deleteCharacterFrame" class="danger">Delete frame</button>
+        </div>
+      </main>
+
+      <aside class="animator-right">
+        <h2>Selected body layer</h2>
+        <strong id="selectedCharacterPart">Torso</strong>
+        <p class="hint">Drag the selected piece directly on the preview, or use these exact controls.</p>
+        <div class="field-row">
+          <label>X<input id="partX" type="number"></label>
+          <label>Y<input id="partY" type="number"></label>
+        </div>
+        <label>Rotation <span id="partRotationValue">0 deg</span>
+          <input id="partRotation" type="range" min="-180" max="180">
+        </label>
+        <label>Rotation exact<input id="partRotationNumber" type="number" min="-180" max="180" step="1"></label>
+        <label>Scale <span id="partScaleValue">100%</span>
+          <input id="partScale" type="range" min="1" max="300" value="100">
+        </label>
+        <label>Scale exact %<input id="partScaleNumber" type="number" min="1" max="300" step="1"></label>
+        <label>Layer light <span id="partBrightnessValue">100%</span>
+          <input id="partBrightness" type="range" min="20" max="200" value="100">
+        </label>
+        <label>Layer light exact %<input id="partBrightnessNumber" type="number" min="20" max="200" step="1" value="100"></label>
+        <button id="partBrightnessReset" class="full quiet">Reset layer light</button>
+        <label class="check"><input id="partFlip" type="checkbox"> Flip this body part</label>
+        <h2>Hand / foot bend</h2>
+        <p class="hint">Optional per-frame bend for hands, wrists, shoes, toes, or any end-piece touching/pushing against something. The selected part shows cut guides: yellow = main bend, red = toe/finger tip. Move them with the zone sliders below.</p>
+        <label class="check"><input id="partBendEnabled" type="checkbox"> Bend end part of this layer</label>
+        <label>Bend cut direction
+          <select id="partBendAxis">
+            <option value="bottom">Bottom/end of sprite</option>
+            <option value="left">Left end of sprite</option>
+            <option value="right">Right end of sprite</option>
+          </select>
+        </label>
+        <label>Bend amount <span id="partBendValue">0 deg</span>
+          <input id="partBend" type="range" min="-55" max="55" value="0">
+        </label>
+        <label>Main bend zone from end <span id="partBendZoneValue">25%</span>
+          <input id="partBendZone" type="range" min="5" max="70" value="25">
+        </label>
+        <label class="check"><input id="partToeBendEnabled" type="checkbox"> Bend fingers / toe tip too</label>
+        <label>Finger/toe cut direction
+          <select id="partToeCutAxis">
+            <option value="same">Same as main bend cut</option>
+            <option value="bottom">Bottom/end of sprite</option>
+            <option value="left">Left end of sprite</option>
+            <option value="right">Right end of sprite</option>
+          </select>
+        </label>
+        <label>Finger/toe bend amount <span id="partToeBendValue">0 deg</span>
+          <input id="partToeBend" type="range" min="-90" max="90" value="0">
+        </label>
+        <label>Finger/toe zone from end <span id="partToeBendZoneValue">12%</span>
+          <input id="partToeBendZone" type="range" min="1" max="100" value="12">
+        </label>
+        <label>Shoe/end move X <span id="partShoeMoveXValue">0px</span>
+          <input id="partShoeMoveX" type="range" min="-120" max="120" value="0">
+        </label>
+        <label>Shoe/end move Y <span id="partShoeMoveYValue">0px</span>
+          <input id="partShoeMoveY" type="range" min="-120" max="120" value="0">
+        </label>
+        <div class="nudge-pad" aria-label="Nudge shoe/end piece">
+          <span>Shoe/end arrows</span>
+          <button data-part-nudge="shoe" data-dx="0" data-dy="-1">↑</button>
+          <button data-part-nudge="shoe" data-dx="-1" data-dy="0">←</button>
+          <button data-part-nudge="shoe" data-dx="1" data-dy="0">→</button>
+          <button data-part-nudge="shoe" data-dx="0" data-dy="1">↓</button>
+        </div>
+        <label>Finger/toe move X <span id="partToeMoveXValue">0px</span>
+          <input id="partToeMoveX" type="range" min="-120" max="120" value="0">
+        </label>
+        <label>Finger/toe move Y <span id="partToeMoveYValue">0px</span>
+          <input id="partToeMoveY" type="range" min="-120" max="120" value="0">
+        </label>
+        <div class="nudge-pad" aria-label="Nudge finger/toe piece">
+          <span>Finger/toe arrows</span>
+          <button data-part-nudge="toe" data-dx="0" data-dy="-1">↑</button>
+          <button data-part-nudge="toe" data-dx="-1" data-dy="0">←</button>
+          <button data-part-nudge="toe" data-dx="1" data-dy="0">→</button>
+          <button data-part-nudge="toe" data-dx="0" data-dy="1">↓</button>
+        </div>
+        <label class="check"><input id="partShowBendGuides" type="checkbox" checked> Show bend/cut markings</label>
+        <div class="transform-buttons">
+          <button id="copyPartTransform">Copy transform</button>
+          <button id="pastePartTransform">Paste transform</button>
+        </div>
+        <p id="partTransformClipboardStatus" class="hint">No copied body-layer transform yet.</p>
+        <h2>Layer order</h2>
+        <p class="hint">Bottom draws first, top draws last. Use this for head behind torso, arms behind body, etc.</p>
+        <div id="partLayerOrder" class="part-layer-order"></div>
+        <div class="transform-buttons">
+          <button id="partLayerBack">Move back</button>
+          <button id="partLayerForward">Move forward</button>
+          <button id="partLayerBottom">Send bottom</button>
+          <button id="partLayerTop">Bring top</button>
+        </div>
+        <h2>Lock movement</h2>
+        <p class="hint">Checked parts move together when you drag one of them or edit X/Y.</p>
+        <div id="partLockList" class="part-lock-list"></div>
+        <div class="transform-buttons">
+          <button id="partRotateLeft">Left 15 deg</button>
+          <button id="partRotateRight">Right 15 deg</button>
+          <button id="partReset">Reset</button>
+        </div>
+        <h2>Output size</h2>
+        <div class="field-row">
+          <label>Width<input id="characterWidth" type="number" min="64" max="1024"></label>
+          <label>Height<input id="characterHeight" type="number" min="64" max="1024"></label>
+        </div>
+        <p class="hint">PNG export makes one horizontal frame strip. GIF export uses the current animation and playback speed.</p>
+      </aside>
+    </div>
+  </section>
+  <input id="characterAssetFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+
+
+  <section id="carBuilder" class="character-animator car-builder" aria-hidden="true">
+    <header class="studio-header">
+      <div>
+        <strong>Car Part Builder</strong>
+        <span>Layer chassis pieces, assign removable parts, tools, and work time</span>
+      </div>
+      <div class="studio-actions">
+        <button id="newCarModel">New model</button>
+        <button id="saveCarModel" class="accent">Save model</button>
+        <button id="closeCarBuilder">Close</button>
+      </div>
+    </header>
+    <div class="animator-layout">
+      <aside class="animator-left">
+        <h2>Model</h2>
+        <label>Name<input id="carModelName" type="text" placeholder="Rusty hatchback shell"></label>
+        <div class="field-row">
+          <label>Width<input id="carModelWidth" type="number" min="64" max="2000"></label>
+          <label>Height<input id="carModelHeight" type="number" min="64" max="1200"></label>
+        </div>
+        <h2>Parts / layers</h2>
+        <button id="addCarPart" class="full accent">+ Add part from selected asset</button>
+        <button id="duplicateCarPart" class="full quiet">Duplicate selected part</button>
+        <button id="deleteCarPart" class="full danger">Delete selected part</button>
+        <div id="carPartList" class="animator-part-list car-part-list"></div>
+        <h2>Asset picker</h2>
+        <input id="carAssetSearch" class="search-box" type="search" placeholder="Find car/chassis/part assets...">
+        <div id="carAssetGrid" class="character-asset-grid"></div>
+        <button id="assignCarPartAsset" class="full quiet">Use selected asset on part</button>
+      </aside>
+      <main class="animator-center">
+        <div class="animator-stage car-builder-stage">
+          <canvas id="carBuilderCanvas" width="640" height="360"></canvas>
+        </div>
+        <div class="character-zoom-controls car-zoom-controls">
+          <button id="carBuilderZoomOut">-</button>
+          <label>Zoom <span id="carBuilderZoomValue">100%</span><input id="carBuilderZoom" type="range" min="50" max="800" value="100" step="10"></label>
+          <button id="carBuilderZoomIn">+</button>
+          <button id="carBuilderZoomReset">100%</button>
+        </div>
+        <p class="hint car-builder-hint">Tip: import/cut sprites in Asset Studio first, then add each chassis/body piece here as its own layer. Drag the selected part in the preview.</p>
+      </main>
+      <aside class="animator-right">
+        <h2>Selected car part</h2>
+        <strong id="selectedCarPartName">No part selected</strong>
+        <label>Part name<input id="carPartName" type="text"></label>
+        <div class="field-row">
+          <label>X<input id="carPartX" type="number"></label>
+          <label>Y<input id="carPartY" type="number"></label>
+        </div>
+        <div class="field-row">
+          <label>Width<input id="carPartW" type="number" min="1"></label>
+          <label>Height<input id="carPartH" type="number" min="1"></label>
+        </div>
+        <label>Rotation <span id="carPartRotationValue">0 deg</span>
+          <input id="carPartRotation" type="range" min="-180" max="180">
+        </label>
+        <label>Scale <span id="carPartScaleValue">100%</span>
+          <input id="carPartScale" type="range" min="5" max="300">
+        </label>
+        <label class="check"><input id="carPartFlip" type="checkbox"> Flip this part left/right</label>
+        <label class="check"><input id="carPartRemovable" type="checkbox"> Player can remove this part</label>
+        <label>Tool needed
+          <select id="carPartTool">
+            <option value="none">No tool</option>
+            <option value="wrench">Wrench</option>
+            <option value="screwdriver">Screwdriver</option>
+            <option value="socket_set">Socket set</option>
+            <option value="pliers">Pliers</option>
+            <option value="jack">Jack</option>
+            <option value="grinder">Grinder</option>
+          </select>
+        </label>
+        <label>Time preset
+          <select id="carPartTimePreset">
+            <option value="10">Quick - 10 sec</option>
+            <option value="30">Normal - 30 sec</option>
+            <option value="60">Stubborn - 1 min</option>
+            <option value="120">Hard - 2 min</option>
+            <option value="300">Big job - 5 min</option>
+          </select>
+        </label>
+        <label>Exact removal time, seconds<input id="carPartTime" type="number" min="0" max="3600"></label>
+        <div class="field-row">
+          <label>Break chance %<input id="carPartBreakChance" type="number" min="0" max="100"></label>
+          <label>Pay value $<input id="carPartReward" type="number" min="0" max="9999"></label>
+        </div>
+        <h2>Layer order</h2>
+        <p class="hint">Bottom draws first. Use this to put parts behind body panels or in front of windows.</p>
+        <div class="transform-buttons">
+          <button id="carPartBack">Move back</button>
+          <button id="carPartForward">Move forward</button>
+          <button id="carPartBottom">Send bottom</button>
+          <button id="carPartTop">Bring top</button>
+        </div>
+      </aside>
+    </div>
+  </section>
+  <input id="carBuilderAssetFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+
+  <section id="playOverlay" class="play-overlay" aria-hidden="true">
+    <canvas id="gameCanvas" width="1280" height="720"></canvas>
+    <div class="game-hud">
+      <div><strong id="gameTime">06:52</strong><span>Monday - Day 1</span></div>
+      <div class="cash">$<span id="gameCash">0</span></div>
+    </div>
+    <button id="exitPlay" class="exit-play">Exit playtest</button>
+    <div id="interactionPrompt" class="interaction-prompt"></div>
+    <div id="dialogueBox" class="dialogue-box" hidden>
+      <strong id="dialogueName">Foreman</strong>
+      <p id="dialogueText"></p>
+      <button id="dialogueContinue">Continue</button>
+    </div>
+    <div class="mobile-controls">
+      <button data-control="left">&lt;</button>
+      <button data-control="crawl">Crouch</button>
+      <button data-control="right">&gt;</button>
+      <button data-control="interact" class="interact">Use</button>
+    </div>
+  </section>
+
+  <input id="projectFile" type="file" accept=".boltworks,.scrapyard,.json,application/json" hidden>
+  <script src="editor.js"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

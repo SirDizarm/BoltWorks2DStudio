@@ -33,7 +33,11 @@ BoltWorks.Shell = (() => {
       event.target.value = '';
     };
     BoltWorks.$('#playPreviewBtn').onclick = () => alert('Play Preview will be rebuilt after Scene Builder is ported. First we are getting the editor modules stable.');
+    BoltWorks.$('#openLegacyBtn')?.addEventListener('click', () => { window.open('../legacy-working-editor/index.html', '_blank'); });
     render();
   };
   return { register, activate, render, setStatus, init };
 })();
+
+
+

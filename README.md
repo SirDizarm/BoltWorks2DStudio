@@ -40,6 +40,22 @@ D:\BoltWorksStudio\START_WEB_EDITOR.cmd
 - **Character Animator:** body layers, frame/timeline editing, transforms, and later bends/guides/export.
 - **Part Builder:** future object/vehicle/component builder with removable parts, tool requirements, work time, break chance, and pay value.
 
+
+## Full old working editor preserved
+
+The complete previous HTML editor has been copied into this repo at:
+
+```text
+web/legacy-working-editor/index.html
+```
+
+Run it with:
+
+```text
+D:\BoltWorksStudio\START_LEGACY_WORKING_EDITOR.cmd
+```
+
+This legacy copy contains the old full Asset Studio and Character Animator behavior while those systems are being ported into the new modular editor. The new editor also has an **Open Legacy Editor** button in the top bar for quick access.
 ## Original prototype features to port forward
 
 The old prototype already explored these workflows:
@@ -68,3 +84,4 @@ All rights reserved.
 This project is private work-in-progress software. No permission is granted to copy, redistribute, sell, publish, sublicense, or reuse the code, art, branding, project files, or assets unless explicit written permission is given by the copyright holder.
 
 The license may change in the future if the project is released publicly or sold.
+
