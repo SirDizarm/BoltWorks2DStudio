@@ -470,3 +470,22 @@ button.danger { color: #ffc2b9; border-color: #6b3932; }
 .object-order-buttons button {
   min-height: 36px;
 }
+
+.character-guide-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-items: center;
+  margin: 8px auto 10px;
+  max-width: 520px;
+}
+
+.character-guide-controls .check,
+.character-guide-controls .hint {
+  grid-column: 1 / -1;
+}
+
+.character-guide-controls .hint {
+  margin: 0;
+  text-align: center;
+}

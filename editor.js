@@ -115,6 +115,7 @@
   let characterLastStep = 0;
   let characterZoom = 1;
   let characterDrag = null;
+  let characterShowGuides = true;
   const characterUndoStack = [];
   let characterTransformClipboard = null;
   let characterShowBendGuides = true;
@@ -390,6 +391,11 @@
       loopMode: { ...defaults.loopMode, ...(character.loopMode || {}) },
       partOrder: normalizePartOrder(character.partOrder || defaults.partOrder),
       lockedParts: Array.isArray(character.lockedParts) ? character.lockedParts.filter(part => bodyParts.includes(part)) : [...defaults.lockedParts],
+      guides: Array.isArray(character.guides) ? character.guides.map((guide, index) => ({
+        id: guide.id || `guide-${index}`,
+        axis: guide.axis === "y" ? "y" : "x",
+        value: clamp(Number(guide.value) || 0, 0, guide.axis === "y" ? (Number(character.height) || defaults.height) : (Number(character.width) || defaults.width))
+      })) : [],
       animations: {}
     };
     animationStates.forEach(state => {
@@ -2881,6 +2887,68 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     characterCanvas.style.width = `${Math.round(project.character.width * characterZoom)}px`;
     characterCanvas.style.height = `${Math.round(project.character.height * characterZoom)}px`;
   }
+
+  function characterGuides() {
+    if (!project.character.guides) project.character.guides = [];
+    return project.character.guides;
+  }
+
+  function drawCharacterGuides(ctx) {
+    if (!characterShowGuides) return;
+    const guides = characterGuides();
+    if (!guides.length) return;
+    ctx.save();
+    ctx.lineWidth = Math.max(1, 1 / Math.max(.5, characterZoom));
+    ctx.setLineDash([6, 4]);
+    ctx.font = "10px sans-serif";
+    guides.forEach((guide, index) => {
+      const value = Number(guide.value) || 0;
+      ctx.strokeStyle = guide.axis === "x" ? "rgba(97, 214, 255, .9)" : "rgba(255, 209, 90, .9)";
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.beginPath();
+      if (guide.axis === "x") {
+        ctx.moveTo(value, 0);
+        ctx.lineTo(value, project.character.height);
+        ctx.stroke();
+        ctx.fillText(`V${index + 1}`, value + 3, 12);
+      } else {
+        ctx.moveTo(0, value);
+        ctx.lineTo(project.character.width, value);
+        ctx.stroke();
+        ctx.fillText(`H${index + 1}`, 4, value - 4);
+      }
+    });
+    ctx.restore();
+  }
+
+  function characterGuideAt(point) {
+    if (!characterShowGuides) return null;
+    const threshold = Math.max(4, 8 / Math.max(.5, characterZoom));
+    let best = null;
+    characterGuides().forEach(guide => {
+      const distance = Math.abs((guide.axis === "x" ? point.x : point.y) - guide.value);
+      if (distance <= threshold && (!best || distance < best.distance)) best = { guide, distance };
+    });
+    return best?.guide || null;
+  }
+
+  function addCharacterGuide(axis) {
+    if (!project.character) return;
+    pushCharacterUndo("Add guide line");
+    characterGuides().push({ id: uid(), axis: axis === "y" ? "y" : "x", value: axis === "y" ? Math.round(project.character.height / 2) : Math.round(project.character.width / 2) });
+    characterShowGuides = true;
+    if ($("#showCharacterGuides")) $("#showCharacterGuides").checked = true;
+    drawCharacterPreview();
+    markDirty();
+  }
+
+  function deleteLastCharacterGuide() {
+    if (!project.character || !characterGuides().length) return;
+    pushCharacterUndo("Delete guide line");
+    characterGuides().pop();
+    drawCharacterPreview();
+    markDirty();
+  }
   function drawCharacterPreview() {
     if (characterCanvas.width !== project.character.width) characterCanvas.width = project.character.width;
     if (characterCanvas.height !== project.character.height) characterCanvas.height = project.character.height;
@@ -3269,6 +3337,17 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   if ($("#characterZoomOut")) $("#characterZoomOut").onclick = () => setCharacterZoom(characterZoom - .25);
   if ($("#characterZoomIn")) $("#characterZoomIn").onclick = () => setCharacterZoom(characterZoom + .25);
   if ($("#characterZoomReset")) $("#characterZoomReset").onclick = () => setCharacterZoom(1);
+  if ($("#showCharacterGuides")) $("#showCharacterGuides").onchange = event => { characterShowGuides = event.target.checked; drawCharacterPreview(); };
+  if ($("#addVerticalGuide")) $("#addVerticalGuide").onclick = () => addCharacterGuide("x");
+  if ($("#addHorizontalGuide")) $("#addHorizontalGuide").onclick = () => addCharacterGuide("y");
+  if ($("#deleteNearestGuide")) $("#deleteNearestGuide").onclick = () => deleteLastCharacterGuide();
+  if ($("#clearCharacterGuides")) $("#clearCharacterGuides").onclick = () => {
+    if (!characterGuides().length) return;
+    pushCharacterUndo("Clear guide lines");
+    project.character.guides = [];
+    drawCharacterPreview();
+    markDirty();
+  };
   $("#partFlip").onchange = event => {
     pushCharacterUndo(`${prettyPart[selectedCharacterPart]} flip`);
     const transform = currentCharacterTransform();
@@ -3382,6 +3461,13 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   });
   characterCanvas.onpointerdown = event => {
     const point = characterCanvasPoint(event);
+    const guide = characterGuideAt(point);
+    if (guide) {
+      pushCharacterUndo("Move guide line");
+      characterDrag = { mode: "guide", guideId: guide.id, axis: guide.axis };
+      characterCanvas.setPointerCapture(event.pointerId);
+      return;
+    }
     if (!characterPointInsidePart(selectedCharacterPart, point)) return;
     pushCharacterUndo(`${prettyPart[selectedCharacterPart]} move`);
     const hit = selectedCharacterPart;
@@ -3389,13 +3475,19 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       const transform = currentCharacterFrame().parts[part];
       return { part, x: transform.x, y: transform.y };
     });
-    characterDrag = { startX: point.x, startY: point.y, parts };
+    characterDrag = { mode: "parts", startX: point.x, startY: point.y, parts };
     characterCanvas.setPointerCapture(event.pointerId);
     renderCharacterParts(); renderCharacterTransforms(); drawCharacterPreview();
   };
   characterCanvas.onpointermove = event => {
     if (!characterDrag) return;
     const point = characterCanvasPoint(event);
+    if (characterDrag.mode === "guide") {
+      const guide = characterGuides().find(item => item.id === characterDrag.guideId);
+      if (guide) guide.value = clamp(characterDrag.axis === "x" ? point.x : point.y, 0, characterDrag.axis === "x" ? project.character.width : project.character.height);
+      drawCharacterPreview();
+      return;
+    }
     const dx = point.x - characterDrag.startX;
     const dy = point.y - characterDrag.startY;
     const frame = currentCharacterFrame();
@@ -3501,14 +3593,14 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       pushCharacterUndo("Load character backup");
       const incomingAssets = Array.isArray(backup.assets) ? backup.assets : [];
       incomingAssets.forEach(asset => {
-        if (!project.assets.some(existing => existing.id === asset.id)) project.assets.push(asset);
+        if (!project.assets.some(existing => existing.id === asset.id)) project.assets.push({ ...asset, category: normalizeAssetCategory(asset) });
       });
       project.character = normalizeCharacter(character, backup.rig || project.rig || {});
       project.rig = { ...(project.rig || {}), ...(backup.rig || {}) };
       selectedCharacterPart = selectedCharacterPart || "torso";
       characterState = project.character.animations[characterState] ? characterState : "standing";
       characterFrameIndex = 0;
-      await loadImages();
+      rebuildImages();
       renderCharacterAnimator();
       renderRig();
       renderAssets();
