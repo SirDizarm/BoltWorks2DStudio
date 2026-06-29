@@ -2201,6 +2201,41 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     };
     pasteImage.src = copiedAssetSprite.src;
   }
+  function expandAssetTransparentCanvas() {
+    const asset = project.assets.find(a => a.id === selectedAssetId);
+    const image = images.get(selectedAssetId);
+    if (!asset || !image?.naturalWidth) return;
+    const left = Math.max(0, Math.round(Number($("#canvasPadLeft")?.value) || 0));
+    const right = Math.max(0, Math.round(Number($("#canvasPadRight")?.value) || 0));
+    const top = Math.max(0, Math.round(Number($("#canvasPadTop")?.value) || 0));
+    const bottom = Math.max(0, Math.round(Number($("#canvasPadBottom")?.value) || 0));
+    if (!left && !right && !top && !bottom) {
+      alert("Type padding pixels first, for example Bottom = 40.");
+      return;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth + left + right;
+    canvas.height = image.naturalHeight + top + bottom;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(image, left, top);
+    const src = canvas.toDataURL("image/png");
+    asset.src = src;
+    asset.name = `${asset.name.replace(/.[^.]+$/, "")}.png`;
+    asset.backgroundRemoved = { ...(asset.backgroundRemoved || {}), canvasPadding: { left, right, top, bottom }, appliedAt: Date.now() };
+    if (assetSelection) assetSelection = { ...assetSelection, x: assetSelection.x + left, y: assetSelection.y + top };
+    const replacement = new Image();
+    replacement.onload = refreshAssetViews;
+    replacement.src = src;
+    images.set(asset.id, replacement);
+    assetPreviewCache = null;
+    renderAssets();
+    updateSelectionDetails(`Expanded canvas to ${canvas.width} x ${canvas.height}px. Artwork was not scaled.`);
+    renderRig();
+    renderCharacterAnimator();
+    markDirty();
+  }
   function downloadSelectedSprite() {
     const sourceAsset = project.assets.find(a => a.id === selectedAssetId);
     const image = images.get(selectedAssetId);
@@ -2294,6 +2329,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   $("#replaceAsset").onclick = () => $("#replaceAssetFile").click();
   $("#createTransparentCopy").onclick = () => saveTransparentAsset(false);
   $("#applyTransparencyAsset").onclick = () => saveTransparentAsset(true);
+  if ($("#expandAssetCanvas")) $("#expandAssetCanvas").onclick = expandAssetTransparentCanvas;
   $("#downloadTransparentAsset").onclick = () => {
     const image = images.get(selectedAssetId);
     const asset = project.assets.find(item => item.id === selectedAssetId);

@@ -379,6 +379,17 @@
             <button id="keepSelectionPixels" disabled>Keep only selection</button>
             <button id="eraseSelectionPixels" class="danger" disabled>Erase inside selection</button>
           </div>
+          <div class="pixel-edit-actions">
+            <strong>Expand transparent canvas</strong>
+            <span>Adds empty pixels around this asset without scaling the existing artwork, so copied parts can be pasted/merged outside the old bounds.</span>
+            <div class="selection-number-grid">
+              <label>Left<input id="canvasPadLeft" type="number" min="0" step="1" value="0"></label>
+              <label>Right<input id="canvasPadRight" type="number" min="0" step="1" value="0"></label>
+              <label>Top<input id="canvasPadTop" type="number" min="0" step="1" value="0"></label>
+              <label>Bottom<input id="canvasPadBottom" type="number" min="0" step="1" value="0"></label>
+            </div>
+            <button id="expandAssetCanvas" class="accent">Expand canvas</button>
+          </div>
           <div class="paint-tools">
             <strong>Texture paint</strong>
             <span>Paint directly onto this asset. Use Select when you want the crop box again.</span>

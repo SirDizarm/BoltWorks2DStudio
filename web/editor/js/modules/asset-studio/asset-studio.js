@@ -1,7 +1,7 @@
 ﻿window.BoltWorks = window.BoltWorks || {};
 BoltWorks.AssetStudio = (() => {
   const title = 'Asset Studio';
-  const view = { shelf: 'all', query: '', bgColor: { r: 128, g: 136, b: 128 }, tolerance: 28, removeMode: 'global', removePreview: true, trim: true, selection: null, pickingBg: false, copiedSelection: null, pasteFlipX: false, pasteFlipY: false };
+  const view = { shelf: 'all', query: '', bgColor: { r: 128, g: 136, b: 128 }, tolerance: 28, removeMode: 'global', removePreview: true, trim: true, selection: null, pickingBg: false, copiedSelection: null, pasteFlipX: false, pasteFlipY: false, padLeft: 0, padRight: 0, padTop: 0, padBottom: 0 };
   const filteredAssets = () => {
     const p = BoltWorks.State.getProject();
     return p.assets.filter(a => (view.shelf === 'all' || a.shelf === view.shelf) && (!view.query || a.name.toLowerCase().includes(view.query.toLowerCase())));
@@ -29,7 +29,7 @@ BoltWorks.AssetStudio = (() => {
   const right = () => {
     const p = BoltWorks.State.getProject(); const asset = BoltWorks.State.assetById(p.selectedAssetId);
     if (!asset) return `<div class="inspector-title">Inspector</div><p class="hint">No asset selected.</p>`;
-    return `<div class="inspector-title">Asset</div><label>Name<input id="assetName" value="${BoltWorks.escapeHtml(asset.name)}"></label><label style="margin-top:10px">Asset shelf<select id="assetShelf">${p.shelves.map(s=>`<option ${asset.shelf===s?'selected':''}>${s}</option>`).join('')}</select></label><p class="hint">${asset.width} × ${asset.height} pixels · placed ${asset.placedCount || 0} times</p><div class="row wrap"><button id="downloadAssetBtn">Download saved image</button><button id="deleteAssetBtn" class="danger">Delete asset</button></div>`;
+    return `<div class="inspector-title">Asset</div><label>Name<input id="assetName" value="${BoltWorks.escapeHtml(asset.name)}"></label><label style="margin-top:10px">Asset shelf<select id="assetShelf">${p.shelves.map(s=>`<option ${asset.shelf===s?'selected':''}>${s}</option>`).join('')}</select></label><p class="hint">${asset.width} × ${asset.height} pixels · placed ${asset.placedCount || 0} times</p><div class="section"><strong>Transparent canvas padding</strong><p class="hint">Adds empty pixels around the image without scaling the artwork, useful before pasting/merging parts.</p><div class="row wrap"><label style="width:76px">Left<input id="padLeft" type="number" min="0" step="1" value="${view.padLeft}"></label><label style="width:76px">Right<input id="padRight" type="number" min="0" step="1" value="${view.padRight}"></label><label style="width:76px">Top<input id="padTop" type="number" min="0" step="1" value="${view.padTop}"></label><label style="width:76px">Bottom<input id="padBottom" type="number" min="0" step="1" value="${view.padBottom}"></label></div><button id="expandCanvasBtn" class="accent" style="width:100%;margin-top:8px">Expand transparent canvas</button></div><div class="row wrap"><button id="downloadAssetBtn">Download saved image</button><button id="deleteAssetBtn" class="danger">Delete asset</button></div>`;
   };
   let dragStart = null;
   const drawAsset = async () => {
@@ -85,6 +85,25 @@ BoltWorks.AssetStudio = (() => {
     const meta = await BoltWorks.ImageUtils.canvasToAssetData(dataUrl);
     BoltWorks.State.addAsset({ id: BoltWorks.uid('asset'), name, shelf, dataUrl, width: meta.width, height: meta.height, placedCount: 0, createdAt: new Date().toISOString() });
   };
+  const expandTransparentCanvas = async () => {
+    const asset = BoltWorks.State.assetById(BoltWorks.State.getProject().selectedAssetId);
+    if (!asset) return;
+    const left = Math.max(0, Math.round(Number(view.padLeft) || 0));
+    const right = Math.max(0, Math.round(Number(view.padRight) || 0));
+    const top = Math.max(0, Math.round(Number(view.padTop) || 0));
+    const bottom = Math.max(0, Math.round(Number(view.padBottom) || 0));
+    if (!left && !right && !top && !bottom) return alert('Type padding pixels first, for example Bottom = 40.');
+    const img = await BoltWorks.loadImage(asset.dataUrl);
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width + left + right;
+    canvas.height = img.height + top + bottom;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, left, top);
+    if (view.selection) view.selection = { ...view.selection, x: view.selection.x + left, y: view.selection.y + top };
+    BoltWorks.State.updateAsset(asset.id, { dataUrl: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height, editedAt: new Date().toISOString(), canvasPadding: { left, right, top, bottom } });
+  };
   const afterRender = () => {
     BoltWorks.$('#importAssetsBtn')?.addEventListener('click', () => BoltWorks.$('#assetFileInput').click());
     BoltWorks.$('#assetFileInput').onchange = async e => {
@@ -99,6 +118,8 @@ BoltWorks.AssetStudio = (() => {
     BoltWorks.$$('.asset-card').forEach(c => c.onclick=()=>{ BoltWorks.State.getProject().selectedAssetId=c.dataset.id; view.selection=null; BoltWorks.State.saveLocal(); BoltWorks.Shell.render(); });
     BoltWorks.$('#assetName')?.addEventListener('change', e=>{ BoltWorks.State.updateAsset(BoltWorks.State.getProject().selectedAssetId,{name:e.target.value}); BoltWorks.Shell.render(); });
     BoltWorks.$('#assetShelf')?.addEventListener('change', e=>{ BoltWorks.State.updateAsset(BoltWorks.State.getProject().selectedAssetId,{shelf:e.target.value}); BoltWorks.Shell.render(); });
+    ['padLeft','padRight','padTop','padBottom'].forEach(id=>BoltWorks.$('#'+id)?.addEventListener('change', e=>{ view[id] = Math.max(0, Math.round(Number(e.target.value) || 0)); e.target.value = view[id]; }));
+    BoltWorks.$('#expandCanvasBtn')?.addEventListener('click', async()=>{ await expandTransparentCanvas(); BoltWorks.Shell.setStatus('Expanded transparent canvas without scaling the artwork.'); BoltWorks.Shell.render(); });
     BoltWorks.$('#deleteAssetBtn')?.addEventListener('click',()=>{ if(confirm('Delete this asset from this project?')){BoltWorks.State.deleteAsset(BoltWorks.State.getProject().selectedAssetId); BoltWorks.Shell.render();} });
     const syncTolerance = v => { view.tolerance = Number(v); const n=BoltWorks.$('#toleranceNumber'), s=BoltWorks.$('#toleranceSlider'); if(n) n.value=view.tolerance; if(s) s.value=view.tolerance; drawAsset(); };
     BoltWorks.$('#toleranceSlider')?.addEventListener('input', e=>syncTolerance(e.target.value));
