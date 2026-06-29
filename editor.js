@@ -3474,9 +3474,90 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     const gif = encodeAnimatedGif(frames, project.character.width, project.character.height, animationFps());
     downloadBlob(gif, `${safeProjectName()}-${characterState}.gif`);
   };
+  if ($("#saveCharacterBackup")) $("#saveCharacterBackup").onclick = async () => {
+    if (!project.character) return alert("There is no character setup to save yet.");
+    const backup = {
+      type: "boltworks-character",
+      version: 1,
+      savedAt: new Date().toISOString(),
+      projectName: project.name,
+      character: project.character,
+      rig: project.rig || {},
+      assets: project.assets.filter(asset => assetInCategory(asset, "character") || asset.characterPart || asset.sourceAssetId)
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const savedName = await saveBlobAs(blob, `${safeProjectName("boltworks-character")}-character.boltchar`, ".boltchar", "BoltWorks character backup");
+    if (savedName) alert(`Character backup saved: ${savedName}`);
+  };
 
-  function safeProjectName() {
-    return project.name.replace(/\W+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "scrapyard-character";
+  if ($("#loadCharacterBackup")) $("#loadCharacterBackup").onclick = () => $("#characterBackupFile").click();
+  if ($("#characterBackupFile")) $("#characterBackupFile").onchange = async event => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const backup = JSON.parse(await file.text());
+      const character = backup.character || backup;
+      if (!character.animations) throw new Error("Missing character animations");
+      pushCharacterUndo("Load character backup");
+      const incomingAssets = Array.isArray(backup.assets) ? backup.assets : [];
+      incomingAssets.forEach(asset => {
+        if (!project.assets.some(existing => existing.id === asset.id)) project.assets.push(asset);
+      });
+      project.character = normalizeCharacter(character, backup.rig || project.rig || {});
+      project.rig = { ...(project.rig || {}), ...(backup.rig || {}) };
+      selectedCharacterPart = selectedCharacterPart || "torso";
+      characterState = project.character.animations[characterState] ? characterState : "standing";
+      characterFrameIndex = 0;
+      await loadImages();
+      renderCharacterAnimator();
+      renderRig();
+      renderAssets();
+      markDirty();
+    } catch (error) {
+      console.error(error);
+      alert("That file is not a valid BoltWorks character backup.");
+    }
+    event.target.value = "";
+  };
+
+  function safeProjectName(fallback = "boltworks-project") {
+    return (project.name || fallback).replace(/\W+/g, "-").replace(/^-|-$/g, "").toLowerCase() || fallback;
+  }
+
+  function sanitizeFilename(name, fallback, extension = "") {
+    const clean = String(name || "").trim().replace(/[<>:"/\\|?*]+/g, "-").replace(/\s+/g, " ").replace(/^\.+|\.+$/g, "");
+    let filename = clean || fallback;
+    if (extension && !filename.toLowerCase().endsWith(extension.toLowerCase())) filename += extension;
+    return filename;
+  }
+
+  function promptForFilename(defaultName, extension) {
+    const picked = prompt("Save as filename:", defaultName);
+    if (picked === null) return null;
+    return sanitizeFilename(picked, defaultName, extension);
+  }
+
+  async function saveBlobAs(blob, defaultName, extension, description = "BoltWorks file") {
+    const filename = sanitizeFilename(defaultName, defaultName, extension);
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: filename,
+          types: [{ description, accept: { [blob.type || "application/octet-stream"]: [extension || ".dat"] } }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return handle.name || filename;
+      } catch (error) {
+        if (error?.name === "AbortError") return null;
+        console.warn("Save picker failed, falling back to download", error);
+      }
+    }
+    const fallbackName = promptForFilename(filename, extension);
+    if (!fallbackName) return null;
+    downloadBlob(blob, fallbackName);
+    return fallbackName;
   }
 
   function downloadBlob(blob, filename) {
@@ -3873,11 +3954,11 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     if (!confirm("Start a new project? Use Save Project first if you want to keep this version.")) return;
     project = normalizeProject(starterProject()); selectionId = null; cameraX = 0; rebuildAll(); markDirty();
   };
-  $("#exportProject").onclick = () => {
+  $("#exportProject").onclick = async () => {
     project.updatedAt = Date.now();
     const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
-    downloadBlob(blob, `${safeProjectName()}.boltworks`);
-    $("#saveState").textContent = "Project file saved";
+    const savedName = await saveBlobAs(blob, `${safeProjectName("boltworks-project")}.boltworks`, ".boltworks", "BoltWorks Studio project");
+    if (savedName) $("#saveState").textContent = `Project file saved: ${savedName}`;
   };
   $("#importProject").onclick = () => $("#projectFile").click();
   $("#projectFile").onchange = async event => {
