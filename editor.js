@@ -4157,6 +4157,8 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   const removedCarParts = new Map();
   let near = null, blockedBusId = null, blockStartedAt = 0, lastHornAt = -999, honkBusId = null, honkFlashUntil = 0;
   let particles = [];
+  let audioUnlocked = false;
+  const queuedSounds = [];
 
   function scene() { return project.scenes?.find(s => s.id === activeSceneId) || project.scenes?.[0] || { id:"main", name:"Scene" }; }
   function sceneObjects() { return (project.objects || []).filter(o => (o.sceneId || project.activeSceneId || activeSceneId) === activeSceneId && o.visible !== false); }
@@ -4178,9 +4180,10 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   const honkTextureId = resolveAssetReference("bus_driver_honk.png");
   (project.objects || []).forEach(o => { if (o.type === "bus" && honkTextureId) o.honkAssetId = honkTextureId; });
 
-  addEventListener("keydown", e => { keys.add(e.code); if (["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.code)) e.preventDefault(); if (["Space","Enter","KeyE"].includes(e.code)) interact(); });
+  addEventListener("keydown", e => { unlockAudio(); keys.add(e.code); if (["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.code)) e.preventDefault(); if (["Space","Enter","KeyE"].includes(e.code)) interact(); });
   addEventListener("keyup", e => keys.delete(e.code));
-  document.querySelectorAll("[data-key]").forEach(btn => { btn.onpointerdown = () => keys.add(btn.dataset.key); btn.onpointerup = btn.onpointercancel = () => keys.delete(btn.dataset.key); });
+  addEventListener("pointerdown", unlockAudio, { once:false });
+  document.querySelectorAll("[data-key]").forEach(btn => { btn.onpointerdown = () => { unlockAudio(); keys.add(btn.dataset.key); }; btn.onpointerup = btn.onpointercancel = () => keys.delete(btn.dataset.key); });
 
   function spawnPlayer() {
     const start = sceneObjects().find(o => o.type === "player_start_here" || o.type === "spawn");
@@ -4192,11 +4195,20 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
 
   function playSound(path) {
     if (!path) return;
-    try { const source = project.exportedSounds?.[path] || path; const audio = new Audio(source); audio.volume = .55; audio.play().catch(() => {}); } catch {}
+    const source = project.exportedSounds?.[path] || path;
+    if (!audioUnlocked) { queuedSounds.push(source); return; }
+    try { const audio = new Audio(source); audio.volume = .65; audio.play().catch(() => {}); } catch {}
+  }
+  function unlockAudio() {
+    audioUnlocked = true;
+    while (queuedSounds.length) {
+      const source = queuedSounds.shift();
+      try { const audio = new Audio(source); audio.volume = .65; audio.play().catch(() => {}); } catch {}
+    }
   }
   function stateForBus(bus) { if (!busState.has(bus.id)) busState.set(bus.id, {}); return busState.get(bus.id); }
   function rawBusProgress(bus) { const st = stateForBus(bus); if (Number.isFinite(st.startedAt)) return (elapsed - st.startedAt) / Math.max(.1, Number(bus.busDuration) || 4); return (elapsed - (Number(bus.busDelay) || 5)) / Math.max(.1, Number(bus.busDuration) || 4); }
-  function busProgress(bus) { return clamp(rawBusProgress(bus), 0, 1); }
+  function busProgress(bus) { return clamp(blockedBusId === bus.id ? 0 : rawBusProgress(bus), 0, 1); }
   function busVisualScale(bus) { const start = clamp(Number(bus.busStartScale) || .59, .05, 1.5); const end = clamp(Number(bus.busEndScale) || 1, .5, 3); return start + (end - start) * busProgress(bus); }
   function playerBlocksBus(bus) { const scale = busVisualScale(bus); const cx = bus.x + bus.w / 2 + (Number(bus.busDriftX) || 0) * busProgress(bus); const half = Math.max(55, bus.w * scale * .55); return player.x >= cx - half - 35 && player.x <= cx + half + 35; }
   function busBlocksPlayerAt(bus, x) { const st = stateForBus(bus); const moving = st.departed || Number.isFinite(st.startedAt) || rawBusProgress(bus) >= 0; if (!moving || busProgress(bus) >= 1) return false; return player.y >= bus.y - 20 && player.y <= bus.y + bus.h + 30 && x + 24 >= bus.x && x - 24 <= bus.x + bus.w; }
@@ -4208,7 +4220,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       const st = stateForBus(bus), progress = rawBusProgress(bus);
       if (st.departed || Number.isFinite(st.startedAt)) { startBus(bus); if (blockedBusId === bus.id) { blockedBusId = null; blockStartedAt = 0; honkBusId = null; } continue; }
       if (progress < 0 || progress >= 1) continue;
-      if (!playerBlocksBus(bus)) { startBus(bus); continue; }
+      if (!playerBlocksBus(bus)) { if (blockedBusId === bus.id) { blockedBusId = null; blockStartedAt = 0; honkBusId = null; } startBus(bus); continue; }
       if (blockedBusId !== bus.id) { blockedBusId = bus.id; blockStartedAt = elapsed; lastHornAt = -999; }
       honk(bus);
       if (elapsed - blockStartedAt >= (Number(bus.busRunOverAfter) || 7)) { player.knocked = true; player.fallAt = elapsed; startBus(bus); blockedBusId = null; blockStartedAt = 0; honkBusId = null; setTimeout(() => goToScene("hospital", "You wake up at the hospital."), 900); }
