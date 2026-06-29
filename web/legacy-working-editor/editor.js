@@ -107,6 +107,8 @@
   let assetPreviewCache = null;
   let assetStatusMessage = "";
   let copiedAssetSprite = null;
+  let floatingPasteLayer = null;
+  let assetUndoStack = [];
   let pasteCopiedFlipX = false;
   let pasteCopiedFlipY = false;
   let characterState = "standing";
@@ -1113,6 +1115,17 @@
     assetCtx.imageSmoothingEnabled = false;
     assetCtx.clearRect(0, 0, assetPreview.width, assetPreview.height);
     assetCtx.drawImage(processedAssetCanvas(asset, image), 0, 0);
+    if (floatingPasteLayer?.assetId === selectedAssetId && floatingPasteLayer.image?.complete) {
+      drawFloatingPasteLayer(assetCtx, floatingPasteLayer);
+      assetCtx.save();
+      assetCtx.strokeStyle = "#ffef95";
+      assetCtx.fillStyle = "rgba(255,216,120,.10)";
+      assetCtx.lineWidth = Math.max(2, 3 / assetZoom);
+      assetCtx.setLineDash([Math.max(4, 8 / assetZoom), Math.max(3, 5 / assetZoom)]);
+      assetCtx.fillRect(floatingPasteLayer.x, floatingPasteLayer.y, floatingPasteLayer.w, floatingPasteLayer.h);
+      assetCtx.strokeRect(floatingPasteLayer.x, floatingPasteLayer.y, floatingPasteLayer.w, floatingPasteLayer.h);
+      assetCtx.restore();
+    }
     if (assetPaintTool !== "select" && assetPaintHover) drawPaintCursorPreview(assetPaintHover);
     if (assetSelection) {
       assetCtx.save();
@@ -1132,6 +1145,9 @@
     $("#downloadSelectedSprite").disabled = !assetSelection;
     if ($("#copySelectedSprite")) $("#copySelectedSprite").disabled = !assetSelection;
     if ($("#pasteCopiedSprite")) $("#pasteCopiedSprite").disabled = !copiedAssetSprite;
+    if ($("#mergeFloatingPaste")) $("#mergeFloatingPaste").disabled = !(floatingPasteLayer?.assetId === selectedAssetId);
+    if ($("#cancelFloatingPaste")) $("#cancelFloatingPaste").disabled = !(floatingPasteLayer?.assetId === selectedAssetId);
+    if ($("#undoAssetEdit")) $("#undoAssetEdit").disabled = !assetUndoStack.length;
     if ($("#pasteFlipX")) $("#pasteFlipX").disabled = !copiedAssetSprite;
     if ($("#pasteFlipY")) $("#pasteFlipY").disabled = !copiedAssetSprite;
     $("#keepSelectionPixels").disabled = !assetSelection;
@@ -1862,6 +1878,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
 
   function commitPaintCanvas(asset, canvas, message = "Paint saved into asset.") {
     const src = canvas.toDataURL("image/png");
+    pushAssetUndo(asset, "paint edit");
     asset.src = src;
     assetPreviewCache = null;
     const replacement = new Image();
@@ -1931,6 +1948,42 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     const h = clamp(Math.round(selection.h), 1, image.naturalHeight - y);
     return { x, y, w, h };
   }
+  function pushAssetUndo(asset, label = "asset edit") {
+    if (!asset) return;
+    assetUndoStack.push({ assetId: asset.id, src: asset.src, name: asset.name, backgroundRemoved: asset.backgroundRemoved ? JSON.parse(JSON.stringify(asset.backgroundRemoved)) : undefined, selection: assetSelection ? { ...assetSelection } : null, label });
+    if (assetUndoStack.length > 30) assetUndoStack.shift();
+    updateSelectionDetails();
+  }
+  function restoreLastAssetUndo() {
+    const entry = assetUndoStack.pop();
+    if (!entry) return;
+    const asset = project.assets.find(a => a.id === entry.assetId);
+    if (!asset) return;
+    asset.src = entry.src;
+    asset.name = entry.name;
+    asset.backgroundRemoved = entry.backgroundRemoved;
+    assetSelection = entry.selection;
+    if (floatingPasteLayer?.assetId === asset.id) floatingPasteLayer = null;
+    const replacement = new Image();
+    replacement.onload = refreshAssetViews;
+    replacement.src = asset.src;
+    images.set(asset.id, replacement);
+    assetPreviewCache = null;
+    renderAssets(); renderRig(); renderCharacterAnimator();
+    updateSelectionDetails(`Undid ${entry.label}.`);
+    markDirty();
+  }
+  function drawFloatingPasteLayer(ctx, layer) {
+    if (!layer?.image) return;
+    ctx.save();
+    ctx.translate(layer.x + (layer.flipX ? layer.w : 0), layer.y + (layer.flipY ? layer.h : 0));
+    ctx.scale(layer.flipX ? -1 : 1, layer.flipY ? -1 : 1);
+    ctx.drawImage(layer.image, 0, 0);
+    ctx.restore();
+  }
+  function pointInFloatingPaste(point) {
+    return floatingPasteLayer?.assetId === selectedAssetId && point.x >= floatingPasteLayer.x && point.y >= floatingPasteLayer.y && point.x <= floatingPasteLayer.x + floatingPasteLayer.w && point.y <= floatingPasteLayer.y + floatingPasteLayer.h;
+  }
   function setAssetSelection(selection, message = "") {
     assetSelection = clampAssetSelection(selection);
     assetSelectionDrag = null;
@@ -1979,6 +2032,15 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       updateSelectionDetails("Painting... release to save into this asset.");
       return;
     }
+    if (pointInFloatingPaste(point)) {
+      floatingPasteLayer.dragging = true;
+      floatingPasteLayer.dragOffsetX = point.x - floatingPasteLayer.x;
+      floatingPasteLayer.dragOffsetY = point.y - floatingPasteLayer.y;
+      assetSelection = { x: floatingPasteLayer.x, y: floatingPasteLayer.y, w: floatingPasteLayer.w, h: floatingPasteLayer.h };
+      drawAssetPreview();
+      updateSelectionDetails(`Moving floating layer: ${floatingPasteLayer.w} x ${floatingPasteLayer.h}px. Use Merge layer or Cancel layer when done.`);
+      return;
+    }
     assetSelectionDrag = point;
     assetSelection = clampAssetSelection({ x: point.x, y: point.y, w: 1, h: 1 }, image);
     drawAssetPreview();
@@ -1995,6 +2057,17 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       assetCtx.drawImage(assetPaintStroke.canvas, 0, 0);
       return;
     }
+    if (floatingPasteLayer?.dragging) {
+      const image = images.get(selectedAssetId);
+      const maxX = Math.max(0, (image?.naturalWidth || 0) - floatingPasteLayer.w);
+      const maxY = Math.max(0, (image?.naturalHeight || 0) - floatingPasteLayer.h);
+      floatingPasteLayer.x = clamp(Math.round(point.x - floatingPasteLayer.dragOffsetX), 0, maxX);
+      floatingPasteLayer.y = clamp(Math.round(point.y - floatingPasteLayer.dragOffsetY), 0, maxY);
+      assetSelection = { x: floatingPasteLayer.x, y: floatingPasteLayer.y, w: floatingPasteLayer.w, h: floatingPasteLayer.h };
+      drawAssetPreview();
+      updateSelectionDetails(`Floating layer: ${floatingPasteLayer.w} x ${floatingPasteLayer.h}px at ${floatingPasteLayer.x}, ${floatingPasteLayer.y}.`);
+      return;
+    }
     if (!assetSelectionDrag) {
       if (assetPaintTool !== "select") drawAssetPreview();
       return;
@@ -2009,6 +2082,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     updateSelectionDetails();
   });
   assetPreview.addEventListener("pointerup", () => {
+    if (floatingPasteLayer?.dragging) floatingPasteLayer.dragging = false;
     if (assetPaintStroke) {
       const asset = project.assets.find(a => a.id === assetPaintStroke.assetId);
       const canvas = assetPaintStroke.canvas;
@@ -2137,6 +2211,9 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   $("#extractAsset").onclick = extractSelectedAsset;
   if ($("#copySelectedSprite")) $("#copySelectedSprite").onclick = copySelectedSprite;
   if ($("#pasteCopiedSprite")) $("#pasteCopiedSprite").onclick = pasteCopiedSprite;
+  if ($("#mergeFloatingPaste")) $("#mergeFloatingPaste").onclick = mergeFloatingPasteLayer;
+  if ($("#cancelFloatingPaste")) $("#cancelFloatingPaste").onclick = cancelFloatingPasteLayer;
+  if ($("#undoAssetEdit")) $("#undoAssetEdit").onclick = restoreLastAssetUndo;
   if ($("#pasteFlipX")) $("#pasteFlipX").onchange = event => { pasteCopiedFlipX = event.target.checked; };
   if ($("#pasteFlipY")) $("#pasteFlipY").onchange = event => { pasteCopiedFlipY = event.target.checked; };
   $("#downloadSelectedSprite").onclick = downloadSelectedSprite;
@@ -2203,37 +2280,50 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     if (!asset || !image?.naturalWidth || !copiedAssetSprite) return;
     const pasteImage = new Image();
     pasteImage.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = image.naturalWidth;
-      canvas.height = image.naturalHeight;
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(image, 0, 0);
-      const x = assetSelection ? assetSelection.x : Math.round((canvas.width - pasteImage.naturalWidth) / 2);
-      const y = assetSelection ? assetSelection.y : Math.round((canvas.height - pasteImage.naturalHeight) / 2);
-      ctx.save();
-      ctx.translate(x + (pasteCopiedFlipX ? pasteImage.naturalWidth : 0), y + (pasteCopiedFlipY ? pasteImage.naturalHeight : 0));
-      ctx.scale(pasteCopiedFlipX ? -1 : 1, pasteCopiedFlipY ? -1 : 1);
-      ctx.drawImage(pasteImage, 0, 0);
-      ctx.restore();
-      const src = canvas.toDataURL("image/png");
-      asset.src = src;
-      asset.name = `${asset.name.replace(/\.[^.]+$/, "")}.png`;
-      asset.backgroundRemoved = { ...(asset.backgroundRemoved || {}), pastedSprite: { sourceAssetId: copiedAssetSprite.sourceAssetId, sourceName: copiedAssetSprite.sourceName, x, y, width: copiedAssetSprite.width, height: copiedAssetSprite.height, flipX: pasteCopiedFlipX, flipY: pasteCopiedFlipY, appliedAt: Date.now() } };
-      const replacement = new Image();
-      replacement.onload = refreshAssetViews;
-      replacement.src = src;
-      images.set(asset.id, replacement);
-      assetPreviewCache = null;
-      assetSelection = { x, y, w: copiedAssetSprite.width, h: copiedAssetSprite.height };
-      renderAssets();
-      const flipped = [pasteCopiedFlipX ? "horizontal" : "", pasteCopiedFlipY ? "vertical" : ""].filter(Boolean).join(" + ");
-      updateSelectionDetails(`Pasted ${copiedAssetSprite.width} x ${copiedAssetSprite.height}px${flipped ? ` flipped ${flipped}` : ""} into "${asset.name}" at ${x}, ${y}.`);
-      renderRig();
-      renderCharacterAnimator();
-      markDirty();
+      const x = assetSelection ? assetSelection.x : Math.round((image.naturalWidth - pasteImage.naturalWidth) / 2);
+      const y = assetSelection ? assetSelection.y : Math.round((image.naturalHeight - pasteImage.naturalHeight) / 2);
+      floatingPasteLayer = { assetId: asset.id, src: copiedAssetSprite.src, image: pasteImage, x: clamp(x, 0, Math.max(0, image.naturalWidth - pasteImage.naturalWidth)), y: clamp(y, 0, Math.max(0, image.naturalHeight - pasteImage.naturalHeight)), w: pasteImage.naturalWidth, h: pasteImage.naturalHeight, sourceAssetId: copiedAssetSprite.sourceAssetId, sourceName: copiedAssetSprite.sourceName, flipX: pasteCopiedFlipX, flipY: pasteCopiedFlipY, dragging: false };
+      assetSelection = { x: floatingPasteLayer.x, y: floatingPasteLayer.y, w: floatingPasteLayer.w, h: floatingPasteLayer.h };
+      drawAssetPreview();
+      updateSelectionDetails(`Floating layer placed: ${floatingPasteLayer.w} x ${floatingPasteLayer.h}px at ${floatingPasteLayer.x}, ${floatingPasteLayer.y}. Drag it, then use Merge layer or Cancel layer.`);
     };
     pasteImage.src = copiedAssetSprite.src;
+  }
+  function cancelFloatingPasteLayer() {
+    if (!(floatingPasteLayer?.assetId === selectedAssetId)) return;
+    const size = `${floatingPasteLayer.w} x ${floatingPasteLayer.h}px`;
+    floatingPasteLayer = null;
+    assetSelection = null;
+    drawAssetPreview();
+    updateSelectionDetails(`Cancelled floating layer (${size}). Asset was not changed.`);
+  }
+  function mergeFloatingPasteLayer() {
+    const asset = project.assets.find(a => a.id === selectedAssetId);
+    const image = images.get(selectedAssetId);
+    const layer = floatingPasteLayer;
+    if (!asset || !image?.naturalWidth || !(layer?.assetId === asset.id)) return;
+    pushAssetUndo(asset, "layer merge");
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(image, 0, 0);
+    drawFloatingPasteLayer(ctx, layer);
+    const src = canvas.toDataURL("image/png");
+    asset.src = src;
+    asset.name = `${asset.name.replace(/\.[^.]+$/, "")}.png`;
+    asset.backgroundRemoved = { ...(asset.backgroundRemoved || {}), pastedSprite: { sourceAssetId: layer.sourceAssetId, sourceName: layer.sourceName, x: layer.x, y: layer.y, width: layer.w, height: layer.h, flipX: layer.flipX, flipY: layer.flipY, appliedAt: Date.now() } };
+    floatingPasteLayer = null;
+    assetSelection = { x: layer.x, y: layer.y, w: layer.w, h: layer.h };
+    const replacement = new Image();
+    replacement.onload = refreshAssetViews;
+    replacement.src = src;
+    images.set(asset.id, replacement);
+    assetPreviewCache = null;
+    renderAssets();
+    updateSelectionDetails(`Merged floating layer into "${asset.name}". Undo is available.`);
+    renderRig(); renderCharacterAnimator(); markDirty();
   }
   function expandAssetTransparentCanvas() {
     const asset = project.assets.find(a => a.id === selectedAssetId);
@@ -2255,8 +2345,9 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(image, left, top);
     const src = canvas.toDataURL("image/png");
+    pushAssetUndo(asset, "canvas expansion");
     asset.src = src;
-    asset.name = `${asset.name.replace(/.[^.]+$/, "")}.png`;
+    asset.name = `${asset.name.replace(/\.[^.]+$/, "")}.png`;
     asset.backgroundRemoved = { ...(asset.backgroundRemoved || {}), canvasPadding: { left, right, top, bottom }, appliedAt: Date.now() };
     if (assetSelection) assetSelection = { ...assetSelection, x: assetSelection.x + left, y: assetSelection.y + top };
     const replacement = new Image();
