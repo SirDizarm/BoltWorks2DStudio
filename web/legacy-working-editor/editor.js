@@ -106,6 +106,7 @@
   let backgroundRemoveMode = "global";
   let assetPreviewCache = null;
   let assetStatusMessage = "";
+  let copiedAssetSprite = null;
   let characterState = "standing";
   let characterFrameIndex = 0;
   let selectedCharacterPart = "torso";
@@ -1127,6 +1128,8 @@
     if (message) assetStatusMessage = message;
     $("#extractAsset").disabled = !assetSelection;
     $("#downloadSelectedSprite").disabled = !assetSelection;
+    if ($("#copySelectedSprite")) $("#copySelectedSprite").disabled = !assetSelection;
+    if ($("#pasteCopiedSprite")) $("#pasteCopiedSprite").disabled = !copiedAssetSprite;
     $("#keepSelectionPixels").disabled = !assetSelection;
     $("#eraseSelectionPixels").disabled = !assetSelection;
     ["selectionX", "selectionY", "selectionW", "selectionH"].forEach(id => { $(`#${id}`).disabled = !assetSelection; });
@@ -2094,6 +2097,8 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     });
   });
   $("#extractAsset").onclick = extractSelectedAsset;
+  if ($("#copySelectedSprite")) $("#copySelectedSprite").onclick = copySelectedSprite;
+  if ($("#pasteCopiedSprite")) $("#pasteCopiedSprite").onclick = pasteCopiedSprite;
   $("#downloadSelectedSprite").onclick = downloadSelectedSprite;
   function makeSelectedSpriteCanvas(image) {
     if (!image?.naturalWidth || !assetSelection) return null;
@@ -2133,6 +2138,57 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     renderAssets();
     updateSelectionDetails(`Created "${newAsset.name}" (${trimmed.width} x ${trimmed.height}px). Select it from the library to place it.`);
     markDirty();
+  }
+  function copySelectedSprite() {
+    const sourceAsset = project.assets.find(a => a.id === selectedAssetId);
+    const image = images.get(selectedAssetId);
+    if (!sourceAsset || !image?.naturalWidth || !assetSelection) return;
+    const canvas = makeSelectedSpriteCanvas(image);
+    if (!canvas) return;
+    copiedAssetSprite = {
+      src: canvas.toDataURL("image/png"),
+      width: canvas.width,
+      height: canvas.height,
+      sourceAssetId: sourceAsset.id,
+      sourceName: sourceAsset.name,
+      copiedAt: Date.now()
+    };
+    updateSelectionDetails(`Copied ${canvas.width} x ${canvas.height}px from "${sourceAsset.name}". Select another asset, pick a paste position, then press Paste copied selection.`);
+    updatePaintControls();
+  }
+
+  function pasteCopiedSprite() {
+    const asset = project.assets.find(a => a.id === selectedAssetId);
+    const image = images.get(selectedAssetId);
+    if (!asset || !image?.naturalWidth || !copiedAssetSprite) return;
+    const pasteImage = new Image();
+    pasteImage.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(image, 0, 0);
+      const x = assetSelection ? assetSelection.x : Math.round((canvas.width - pasteImage.naturalWidth) / 2);
+      const y = assetSelection ? assetSelection.y : Math.round((canvas.height - pasteImage.naturalHeight) / 2);
+      ctx.drawImage(pasteImage, x, y);
+      const src = canvas.toDataURL("image/png");
+      asset.src = src;
+      asset.name = `${asset.name.replace(/\.[^.]+$/, "")}.png`;
+      asset.backgroundRemoved = { ...(asset.backgroundRemoved || {}), pastedSprite: { sourceAssetId: copiedAssetSprite.sourceAssetId, sourceName: copiedAssetSprite.sourceName, x, y, width: copiedAssetSprite.width, height: copiedAssetSprite.height, appliedAt: Date.now() } };
+      const replacement = new Image();
+      replacement.onload = refreshAssetViews;
+      replacement.src = src;
+      images.set(asset.id, replacement);
+      assetPreviewCache = null;
+      assetSelection = { x, y, w: copiedAssetSprite.width, h: copiedAssetSprite.height };
+      renderAssets();
+      updateSelectionDetails(`Pasted ${copiedAssetSprite.width} x ${copiedAssetSprite.height}px into "${asset.name}" at ${x}, ${y}.`);
+      renderRig();
+      renderCharacterAnimator();
+      markDirty();
+    };
+    pasteImage.src = copiedAssetSprite.src;
   }
   function downloadSelectedSprite() {
     const sourceAsset = project.assets.find(a => a.id === selectedAssetId);
@@ -5306,6 +5362,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     }
   }).catch(() => {});
 })();
+
 
 
 
