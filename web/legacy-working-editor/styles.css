@@ -435,6 +435,7 @@ button.danger { color: #ffc2b9; border-color: #6b3932; }
 }
 #assetPreview.painting { cursor: none; }
 #assetPreview.picking-color { cursor: crosshair; }
+#assetPreview.moving-layer { cursor: move; }
 /* Exact numeric boxes beside sliders, so values can be typed or stepped with arrows. */
 .range-with-exact {
   display: grid;

@@ -108,6 +108,7 @@
   let assetStatusMessage = "";
   let copiedAssetSprite = null;
   let floatingPasteLayer = null;
+  let assetMoveLayerMode = false;
   let assetUndoStack = [];
   let pasteCopiedFlipX = false;
   let pasteCopiedFlipY = false;
@@ -1145,6 +1146,10 @@
     $("#downloadSelectedSprite").disabled = !assetSelection;
     if ($("#copySelectedSprite")) $("#copySelectedSprite").disabled = !assetSelection;
     if ($("#pasteCopiedSprite")) $("#pasteCopiedSprite").disabled = !copiedAssetSprite;
+    if ($("#moveFloatingPaste")) {
+      $("#moveFloatingPaste").disabled = !(floatingPasteLayer?.assetId === selectedAssetId);
+      $("#moveFloatingPaste").classList.toggle("active", assetMoveLayerMode && floatingPasteLayer?.assetId === selectedAssetId);
+    }
     if ($("#mergeFloatingPaste")) $("#mergeFloatingPaste").disabled = !(floatingPasteLayer?.assetId === selectedAssetId);
     if ($("#cancelFloatingPaste")) $("#cancelFloatingPaste").disabled = !(floatingPasteLayer?.assetId === selectedAssetId);
     if ($("#undoAssetEdit")) $("#undoAssetEdit").disabled = !assetUndoStack.length;
@@ -1711,6 +1716,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     if ($("#pickPaintColor")) $("#pickPaintColor").classList.toggle("active", paintColorPickActive);
     if (assetPreview) {
       assetPreview.classList.toggle("painting", assetPaintTool !== "select" && !paintColorPickActive);
+      assetPreview.classList.toggle("moving-layer", assetMoveLayerMode && floatingPasteLayer?.assetId === selectedAssetId);
       assetPreview.classList.toggle("picking-color", paintColorPickActive);
     }
     drawAssetPreview();
@@ -1733,6 +1739,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     if ($("#pickPaintColor")) $("#pickPaintColor").classList.toggle("active", paintColorPickActive);
     if (assetPreview) {
       assetPreview.classList.toggle("painting", assetPaintTool !== "select" && !paintColorPickActive);
+      assetPreview.classList.toggle("moving-layer", assetMoveLayerMode && floatingPasteLayer?.assetId === selectedAssetId);
       assetPreview.classList.toggle("picking-color", paintColorPickActive);
     }
     drawAssetPreview();
@@ -1984,6 +1991,22 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   function pointInFloatingPaste(point) {
     return floatingPasteLayer?.assetId === selectedAssetId && point.x >= floatingPasteLayer.x && point.y >= floatingPasteLayer.y && point.x <= floatingPasteLayer.x + floatingPasteLayer.w && point.y <= floatingPasteLayer.y + floatingPasteLayer.h;
   }
+  function startMovingFloatingLayer(point, centered = false) {
+    if (!(floatingPasteLayer?.assetId === selectedAssetId)) return false;
+    floatingPasteLayer.dragging = true;
+    floatingPasteLayer.dragOffsetX = centered ? Math.round(floatingPasteLayer.w / 2) : point.x - floatingPasteLayer.x;
+    floatingPasteLayer.dragOffsetY = centered ? Math.round(floatingPasteLayer.h / 2) : point.y - floatingPasteLayer.y;
+    assetSelection = { x: floatingPasteLayer.x, y: floatingPasteLayer.y, w: floatingPasteLayer.w, h: floatingPasteLayer.h };
+    drawAssetPreview();
+    updateSelectionDetails(`Moving floating layer: ${floatingPasteLayer.w} x ${floatingPasteLayer.h}px. Drag to place it, then use Merge layer or Cancel layer.`);
+    return true;
+  }
+  function setMoveLayerMode(active) {
+    assetMoveLayerMode = !!active && floatingPasteLayer?.assetId === selectedAssetId;
+    if (assetMoveLayerMode) setAssetPaintTool("select");
+    if (assetPreview) assetPreview.classList.toggle("moving-layer", assetMoveLayerMode);
+    updateSelectionDetails(assetMoveLayerMode ? "Move layer mode: drag in the preview to move the floating pasted layer." : "Move layer mode off. Normal selection is active.");
+  }
   function setAssetSelection(selection, message = "") {
     assetSelection = clampAssetSelection(selection);
     assetSelectionDrag = null;
@@ -2032,13 +2055,12 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       updateSelectionDetails("Painting... release to save into this asset.");
       return;
     }
+    if (assetMoveLayerMode && floatingPasteLayer?.assetId === selectedAssetId) {
+      startMovingFloatingLayer(point, true);
+      return;
+    }
     if (pointInFloatingPaste(point)) {
-      floatingPasteLayer.dragging = true;
-      floatingPasteLayer.dragOffsetX = point.x - floatingPasteLayer.x;
-      floatingPasteLayer.dragOffsetY = point.y - floatingPasteLayer.y;
-      assetSelection = { x: floatingPasteLayer.x, y: floatingPasteLayer.y, w: floatingPasteLayer.w, h: floatingPasteLayer.h };
-      drawAssetPreview();
-      updateSelectionDetails(`Moving floating layer: ${floatingPasteLayer.w} x ${floatingPasteLayer.h}px. Use Merge layer or Cancel layer when done.`);
+      startMovingFloatingLayer(point, false);
       return;
     }
     assetSelectionDrag = point;
@@ -2211,6 +2233,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   $("#extractAsset").onclick = extractSelectedAsset;
   if ($("#copySelectedSprite")) $("#copySelectedSprite").onclick = copySelectedSprite;
   if ($("#pasteCopiedSprite")) $("#pasteCopiedSprite").onclick = pasteCopiedSprite;
+  if ($("#moveFloatingPaste")) $("#moveFloatingPaste").onclick = () => setMoveLayerMode(!assetMoveLayerMode);
   if ($("#mergeFloatingPaste")) $("#mergeFloatingPaste").onclick = mergeFloatingPasteLayer;
   if ($("#cancelFloatingPaste")) $("#cancelFloatingPaste").onclick = cancelFloatingPasteLayer;
   if ($("#undoAssetEdit")) $("#undoAssetEdit").onclick = restoreLastAssetUndo;
@@ -2283,6 +2306,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       const x = assetSelection ? assetSelection.x : Math.round((image.naturalWidth - pasteImage.naturalWidth) / 2);
       const y = assetSelection ? assetSelection.y : Math.round((image.naturalHeight - pasteImage.naturalHeight) / 2);
       floatingPasteLayer = { assetId: asset.id, src: copiedAssetSprite.src, image: pasteImage, x: clamp(x, 0, Math.max(0, image.naturalWidth - pasteImage.naturalWidth)), y: clamp(y, 0, Math.max(0, image.naturalHeight - pasteImage.naturalHeight)), w: pasteImage.naturalWidth, h: pasteImage.naturalHeight, sourceAssetId: copiedAssetSprite.sourceAssetId, sourceName: copiedAssetSprite.sourceName, flipX: pasteCopiedFlipX, flipY: pasteCopiedFlipY, dragging: false };
+      assetMoveLayerMode = true;
       assetSelection = { x: floatingPasteLayer.x, y: floatingPasteLayer.y, w: floatingPasteLayer.w, h: floatingPasteLayer.h };
       drawAssetPreview();
       updateSelectionDetails(`Floating layer placed: ${floatingPasteLayer.w} x ${floatingPasteLayer.h}px at ${floatingPasteLayer.x}, ${floatingPasteLayer.y}. Drag it, then use Merge layer or Cancel layer.`);
@@ -2293,6 +2317,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     if (!(floatingPasteLayer?.assetId === selectedAssetId)) return;
     const size = `${floatingPasteLayer.w} x ${floatingPasteLayer.h}px`;
     floatingPasteLayer = null;
+    assetMoveLayerMode = false;
     assetSelection = null;
     drawAssetPreview();
     updateSelectionDetails(`Cancelled floating layer (${size}). Asset was not changed.`);
@@ -2315,6 +2340,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     asset.name = `${asset.name.replace(/\.[^.]+$/, "")}.png`;
     asset.backgroundRemoved = { ...(asset.backgroundRemoved || {}), pastedSprite: { sourceAssetId: layer.sourceAssetId, sourceName: layer.sourceName, x: layer.x, y: layer.y, width: layer.w, height: layer.h, flipX: layer.flipX, flipY: layer.flipY, appliedAt: Date.now() } };
     floatingPasteLayer = null;
+    assetMoveLayerMode = false;
     assetSelection = { x: layer.x, y: layer.y, w: layer.w, h: layer.h };
     const replacement = new Image();
     replacement.onload = refreshAssetViews;
