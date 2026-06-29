@@ -4151,23 +4151,33 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
   const bodyParts = ["backArm", "backLeg", "head", "torso", "frontLeg", "frontArm"];
   let activeSceneId = project.activeSceneId || project.scenes?.[0]?.id || "main";
-  let cameraX = 0, last = performance.now(), elapsed = 0, dialogueUntil = 0;
-  let player = { x: project.player?.spawnX || 120, y: 0, facing: 1, walking:false, crawling:false };
+  let cameraX = 0, last = performance.now(), elapsed = 0, dialogueUntil = 0, cash = 0;
+  let player = { x: project.player?.spawnX || 120, y: 0, facing: 1, walking:false, crawling:false, knocked:false, hidden:false, fallAt:0 };
+  const busState = new Map();
+  const removedCarParts = new Map();
+  let near = null, blockedBusId = null, blockStartedAt = 0, lastHornAt = -999, honkBusId = null, honkFlashUntil = 0;
+  let particles = [];
 
   function scene() { return project.scenes?.find(s => s.id === activeSceneId) || project.scenes?.[0] || { id:"main", name:"Scene" }; }
   function sceneObjects() { return (project.objects || []).filter(o => (o.sceneId || project.activeSceneId || activeSceneId) === activeSceneId && o.visible !== false); }
   function visibleLayers() { return (project.layers || []).filter(l => l.visible !== false); }
   function groundY() { return (project.world?.height || 720) - (project.world?.groundHeight || 150); }
-  function layerById(id) { return (project.layers || []).find(l => l.id === id) || { id:"ground", parallax:1, color:"#697463" }; }
   function assetImage(id) { return id ? images.get(id) : null; }
   function sceneArt(slot) { return project.sceneArt?.[slot] || {}; }
   function sceneArtImage(slot) { return assetImage(sceneArt(slot).assetId); }
   function objectBlendMode(o) { return ["source-over","multiply","screen","overlay","soft-light"].includes(o?.blendMode) ? o.blendMode : "source-over"; }
-  function escapeText(text) { return String(text || ""); }
   function resize() { const dpr = Math.min(devicePixelRatio || 1, 2); canvas.width = Math.round(innerWidth*dpr); canvas.height = Math.round(innerHeight*dpr); }
   addEventListener("resize", resize); resize();
 
   (project.assets || []).forEach(asset => { const img = new Image(); img.src = asset.src; images.set(asset.id, img); });
+  function resolveAssetReference(nameOrId) {
+    if (!nameOrId) return null;
+    const wanted = String(nameOrId).toLowerCase();
+    return (project.assets || []).find(a => a.id === nameOrId || String(a.name || "").toLowerCase() === wanted || String(a.name || "").toLowerCase().endsWith("/" + wanted))?.id || null;
+  }
+  const honkTextureId = resolveAssetReference("bus_driver_honk.png");
+  (project.objects || []).forEach(o => { if (o.type === "bus" && honkTextureId) o.honkAssetId = honkTextureId; });
+
   addEventListener("keydown", e => { keys.add(e.code); if (["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.code)) e.preventDefault(); if (["Space","Enter","KeyE"].includes(e.code)) interact(); });
   addEventListener("keyup", e => keys.delete(e.code));
   document.querySelectorAll("[data-key]").forEach(btn => { btn.onpointerdown = () => keys.add(btn.dataset.key); btn.onpointerup = btn.onpointercancel = () => keys.delete(btn.dataset.key); });
@@ -4176,8 +4186,37 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     const start = sceneObjects().find(o => o.type === "player_start_here" || o.type === "spawn");
     player.x = start ? start.x + start.w / 2 : project.player?.spawnX || 120;
     player.y = groundY();
+    player.hidden = false; player.knocked = false; player.fallAt = 0;
   }
   spawnPlayer();
+
+  function playSound(path) {
+    if (!path) return;
+    try { const audio = new Audio(path); audio.volume = .55; audio.play().catch(() => {}); } catch {}
+  }
+  function stateForBus(bus) { if (!busState.has(bus.id)) busState.set(bus.id, {}); return busState.get(bus.id); }
+  function rawBusProgress(bus) { const st = stateForBus(bus); if (Number.isFinite(st.startedAt)) return (elapsed - st.startedAt) / Math.max(.1, Number(bus.busDuration) || 4); return (elapsed - (Number(bus.busDelay) || 5)) / Math.max(.1, Number(bus.busDuration) || 4); }
+  function busProgress(bus) { return clamp(rawBusProgress(bus), 0, 1); }
+  function busVisualScale(bus) { const start = clamp(Number(bus.busStartScale) || .59, .05, 1.5); const end = clamp(Number(bus.busEndScale) || 1, .5, 3); return start + (end - start) * busProgress(bus); }
+  function playerBlocksBus(bus) { const scale = busVisualScale(bus); const cx = bus.x + bus.w / 2 + (Number(bus.busDriftX) || 0) * busProgress(bus); const half = Math.max(55, bus.w * scale * .55); return player.x >= cx - half - 35 && player.x <= cx + half + 35; }
+  function busBlocksPlayerAt(bus, x) { const st = stateForBus(bus); const moving = st.departed || Number.isFinite(st.startedAt) || rawBusProgress(bus) >= 0; if (!moving || busProgress(bus) >= 1) return false; return player.y >= bus.y - 20 && player.y <= bus.y + bus.h + 30 && x + 24 >= bus.x && x - 24 <= bus.x + bus.w; }
+  function blockedByMovingBus(nextX, currentX) { return sceneObjects().some(o => { if (o.visible === false || o.type !== "bus") return false; if (!busBlocksPlayerAt(o, nextX)) return false; if (!busBlocksPlayerAt(o, currentX)) return true; const center = o.x + o.w / 2; return Math.abs(nextX - center) <= Math.abs(currentX - center); }); }
+  function startBus(bus) { const st = stateForBus(bus); if (!st.departed) { st.departed = true; st.startedAt = elapsed; playSound(bus.engineSound || "soundAssets/bus_idle.mp3"); spawnBusGust(bus, true); } }
+  function honk(bus) { honkBusId = bus.id; if (elapsed - lastHornAt >= 1.15) { if (honkTextureId) bus.honkAssetId = honkTextureId; honkFlashUntil = elapsed + .38; playSound(bus.honkSound || "soundAssets/bus_horn.mp3"); lastHornAt = elapsed; } }
+  function updateBusHazards() {
+    for (const bus of sceneObjects().filter(o => o.type === "bus" && o.visible !== false)) {
+      const st = stateForBus(bus), progress = rawBusProgress(bus);
+      if (st.departed || Number.isFinite(st.startedAt)) { startBus(bus); if (blockedBusId === bus.id) { blockedBusId = null; blockStartedAt = 0; honkBusId = null; } continue; }
+      if (progress < 0 || progress >= 1) continue;
+      if (!playerBlocksBus(bus)) { startBus(bus); continue; }
+      if (blockedBusId !== bus.id) { blockedBusId = bus.id; blockStartedAt = elapsed; lastHornAt = -999; }
+      honk(bus);
+      if (elapsed - blockStartedAt >= (Number(bus.busRunOverAfter) || 7)) { player.knocked = true; player.fallAt = elapsed; startBus(bus); blockedBusId = null; blockStartedAt = 0; honkBusId = null; setTimeout(() => goToScene("hospital", "You wake up at the hospital."), 900); }
+      break;
+    }
+  }
+  function spawnBusGust(bus, burst=false) { const scale = busVisualScale(bus), cx = bus.x + bus.w/2, bottom = bus.y + bus.h; for (const side of [-1, 1]) for (let i=0; i<(burst ? 14 : 3); i++) particles.push({ x: cx + side * bus.w * scale * .34 + side * 10, y: bottom - 12, vx: side * (35 + Math.random()*75), vy: -18 - Math.random()*45, age:0, life: burst ? .9 : .55, size: burst ? 16 + Math.random()*18 : 8 + Math.random()*12 }); if (particles.length > 180) particles.splice(0, particles.length - 180); }
+  function updateParticles(dt) { sceneObjects().filter(o => o.type === "bus").forEach(bus => { const st = stateForBus(bus); if ((st.departed || Number.isFinite(st.startedAt)) && busProgress(bus) < 1 && Math.random() < dt * 12) spawnBusGust(bus); }); particles.forEach(p => { p.age += dt; p.x += p.vx*dt; p.y += p.vy*dt; p.vx *= Math.pow(.82, dt*8); p.vy += 38*dt; p.size += 10*dt; }); particles = particles.filter(p => p.age < p.life); }
 
   function drawSceneArtLayer(slot, layer, viewX, viewportW, fallback) {
     const art = sceneArt(slot), img = sceneArtImage(slot), gy = groundY();
@@ -4186,78 +4225,76 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     const scale = drawHeight / img.naturalHeight;
     const drawWidth = img.naturalWidth * scale;
     const y = slot === "ground" ? gy + (art.yOffset || 0) : slot === "background" ? (art.yOffset || 0) : gy - drawHeight + (art.yOffset || 0);
-    if (art.mode === "tile") {
-      const step = Math.max(1, drawWidth + (art.spacing || 0));
-      const start = Math.floor((viewX * (layer?.parallax || 0) - step) / step) * step;
-      for (let x=start; x<start+viewportW+step*2; x+=step) ctx.drawImage(img, x, y, drawWidth, drawHeight);
-    } else {
-      ctx.drawImage(img, slot === "background" ? viewX * (layer?.parallax || 0) : 0, y, slot === "background" ? viewportW : (project.world?.width || 5000), slot === "background" ? (project.world?.height || 720) : drawHeight);
-    }
+    if (art.mode === "tile") { const step = Math.max(1, drawWidth + (art.spacing || 0)); const start = Math.floor((viewX * (layer?.parallax || 0) - step) / step) * step; for (let x=start; x<start+viewportW+step*2; x+=step) ctx.drawImage(img, x, y, drawWidth, drawHeight); }
+    else ctx.drawImage(img, slot === "background" ? viewX * (layer?.parallax || 0) : 0, y, slot === "background" ? viewportW : (project.world?.width || 5000), slot === "background" ? (project.world?.height || 720) : drawHeight);
   }
-
   function drawLayerBackdrop(layer, viewX, viewportW) {
     const gy = groundY();
     if (layer.id === "background") drawSceneArtLayer("background", layer, viewX, viewportW);
-    if (layer.id === "far") drawSceneArtLayer("far", layer, viewX, viewportW, () => {
-      ctx.fillStyle = layer.color || "#697463"; const start = Math.floor((viewX*layer.parallax-500)/600)*600;
-      for (let x=start; x<start+viewportW+1400; x+=600) { ctx.beginPath(); ctx.moveTo(x,gy+10); ctx.lineTo(x+140,330); ctx.lineTo(x+310,gy+10); ctx.fill(); ctx.fillRect(x+380,360,80,gy-360); ctx.fillRect(x+455,430,100,gy-430); }
-    });
+    if (layer.id === "far") drawSceneArtLayer("far", layer, viewX, viewportW, () => { ctx.fillStyle = layer.color || "#697463"; const start = Math.floor((viewX*layer.parallax-500)/600)*600; for (let x=start; x<start+viewportW+1400; x+=600) { ctx.beginPath(); ctx.moveTo(x,gy+10); ctx.lineTo(x+140,330); ctx.lineTo(x+310,gy+10); ctx.fill(); ctx.fillRect(x+380,360,80,gy-360); ctx.fillRect(x+455,430,100,gy-430); } });
     if (layer.id === "ground") { ctx.fillStyle = layer.color || "#696a52"; ctx.fillRect(0, gy, project.world.width, project.world.groundHeight || 150); drawSceneArtLayer("ground", layer, viewX, viewportW); }
     if (layer.id === "front") drawSceneArtLayer("front", layer, viewX, viewportW, () => { ctx.fillStyle="#252b21"; for(let x=Math.floor((viewX*layer.parallax-200)/430)*430; x<viewX+viewportW+900; x+=430){ctx.beginPath();ctx.moveTo(x,project.world.height);ctx.lineTo(x+24,635);ctx.lineTo(x+50,project.world.height);ctx.fill();} });
   }
 
+  function carModelById(id) { return (project.carModels || []).find(m => m.id === id) || null; }
+  function drawCarModel(model, x, y, w, h, removed) { if (!model) return; ctx.save(); ctx.translate(x,y); ctx.scale(w / Math.max(1, model.width || 1), h / Math.max(1, model.height || 1)); (model.parts || []).forEach(part => { if (removed?.has(part.id)) return; const img = assetImage(part.assetId); ctx.save(); ctx.translate(part.x + part.w/2, part.y + part.h/2); ctx.rotate((part.rotation||0)*Math.PI/180); const sc=Number(part.scale)||1; ctx.scale((part.flip?-1:1)*sc, sc); if (img?.complete && img.naturalWidth) ctx.drawImage(img, -part.w/2, -part.h/2, part.w, part.h); else { ctx.fillStyle = part.removable ? "rgba(184,138,50,.55)" : "rgba(80,92,84,.65)"; ctx.fillRect(-part.w/2,-part.h/2,part.w,part.h); } ctx.restore(); }); ctx.restore(); }
   function drawObject(o) {
     if (o.type === "trigger" || o.type === "player_start_here" || o.type === "spawn") return;
-    ctx.save(); ctx.globalAlpha = clamp(Number(o.opacity ?? 1),0,1); ctx.globalCompositeOperation = objectBlendMode(o);
-    ctx.translate(o.x + o.w/2, o.y + o.h/2); ctx.rotate((o.rotation||0)*Math.PI/180); ctx.scale(o.flip?-1:1,1); ctx.translate(-o.w/2,-o.h/2);
-    const img = assetImage(o.assetId) || (o.type === "bus" ? sceneArtImage("bus") : o.type === "bus-stop" ? sceneArtImage("busStop") : null);
+    ctx.save(); ctx.globalAlpha = clamp(Number(o.opacity ?? 1),0,1); ctx.globalCompositeOperation = objectBlendMode(o); ctx.translate(o.x + o.w/2, o.y + o.h/2); ctx.rotate((o.rotation||0)*Math.PI/180); ctx.scale(o.flip?-1:1,1); ctx.translate(-o.w/2,-o.h/2);
+    if (o.type === "car_model") { drawCarModel(carModelById(o.carModelId), 0, 0, o.w, o.h, removedCarParts.get(o.id)); ctx.restore(); return; }
+    if (o.type === "bus") { const p = busProgress(o), sc = busVisualScale(o), anchorY = o.busAnchor === "center" ? o.h/2 : o.h; if (p >= 1) { ctx.restore(); return; } ctx.translate(o.w/2 + (Number(o.busDriftX)||0)*p, anchorY + (Number(o.busDriftY)||0)*p); ctx.scale(sc, sc); ctx.translate(-o.w/2, -anchorY); }
+    const honkImg = o.type === "bus" && honkBusId === o.id && elapsed <= honkFlashUntil && o.honkAssetId ? assetImage(o.honkAssetId) : null;
+    const img = honkImg || assetImage(o.assetId) || (o.type === "bus" ? sceneArtImage("bus") : o.type === "bus-stop" ? sceneArtImage("busStop") : null);
     if (img?.complete && img.naturalWidth) ctx.drawImage(img,0,0,o.w,o.h);
-    else { ctx.fillStyle = o.type === "bus" ? "#b88a32" : o.type === "npc" ? "#59634e" : "#697463"; ctx.fillRect(0,0,o.w,o.h); }
+    else { ctx.fillStyle = o.type === "bus" ? "#b88a32" : o.type === "npc" ? "#59634e" : o.type === "gate" ? "#464c43" : "#697463"; ctx.fillRect(0,0,o.w,o.h); if (o.type === "npc") { ctx.fillStyle="#a88c70"; ctx.beginPath(); ctx.arc(o.w*.5,o.h*.16,o.w*.2,0,Math.PI*2); ctx.fill(); } }
     ctx.restore();
   }
 
   function partSize(part, t) { const img = assetImage(t?.assetId); return img?.naturalWidth ? { w: img.naturalWidth*(t.scale||1), h: img.naturalHeight*(t.scale||1) } : { w: part === "head" ? 54 : part.includes("Leg") ? 22 : 42, h: part === "head" ? 54 : part.includes("Leg") ? 90 : 80 }; }
   function partAnchor(part, s) { return part === "head" || part === "torso" ? { x:-s.w/2, y:-s.h/2 } : { x:-s.w/2, y:0 }; }
   function drawPlayer() {
+    if (player.hidden) return;
     const character = project.character; if (!character) return;
-    const anim = player.walking ? "walking" : "standing";
+    const anim = player.crawling ? "crawling" : player.walking ? "walking" : "standing";
     const frames = character.animations?.[anim] || character.animations?.standing || [];
     const frame = frames[Math.floor(elapsed * (character.animationFps?.[anim] || character.fps || 8)) % Math.max(1, frames.length)]; if (!frame) return;
-    ctx.save(); ctx.translate(player.x, player.y); ctx.scale(player.facing < 0 ? -1 : 1, 1); ctx.translate(-character.width/2, -character.height + 22);
+    ctx.save(); ctx.translate(player.x, player.y); if (player.knocked) { const fall = clamp((elapsed - player.fallAt) / .45, 0, 1); ctx.rotate(-Math.PI/2*fall); ctx.translate(-character.height*.18*fall, -character.height*.22*fall); } ctx.scale(player.facing < 0 ? -1 : 1, 1); ctx.translate(-character.width/2, -character.height + 22);
     (character.partOrder || bodyParts).forEach(part => { const t = frame.parts?.[part]; if (!t) return; const img = assetImage(t.assetId); const s = partSize(part,t); const a = partAnchor(part,s); ctx.save(); ctx.translate(t.x||0,t.y||0); ctx.rotate((t.rotation||0)*Math.PI/180); ctx.scale(t.flip?-1:1,1); if (img?.complete && img.naturalWidth) ctx.drawImage(img,a.x,a.y,s.w,s.h); else { ctx.fillStyle = part === "head" ? "#bd9272" : "#365f56"; ctx.fillRect(a.x,a.y,s.w,s.h); } ctx.restore(); });
     ctx.restore();
   }
 
   function showDialogue(text) { const box=document.getElementById("dialogue"); box.textContent=text; box.style.display="block"; dialogueUntil=elapsed+4; }
+  function goToScene(sceneNameOrId, text) { const wanted = String(sceneNameOrId || "").toLowerCase(); const target = (project.scenes || []).find(s => s.id === sceneNameOrId || String(s.name || "").toLowerCase() === wanted) || scene(); activeSceneId = target.id; blockedBusId = null; honkBusId = null; blockStartedAt = 0; spawnPlayer(); if (text) showDialogue(text); }
+  function nextRemovableCarPart(o) { const model = carModelById(o.carModelId); if (!model) return null; const removed = removedCarParts.get(o.id) || new Set(); return (model.parts || []).find(p => p.removable && !removed.has(p.id)) || null; }
+  function findNear() { const trigger = sceneObjects().filter(o => o.type === "trigger").find(o => player.x >= o.x - 45 && player.x <= o.x + o.w + 45); const car = sceneObjects().filter(o => o.type === "car_model").find(o => player.x >= o.x - 55 && player.x <= o.x + o.w + 55 && nextRemovableCarPart(o)); near = trigger || car || null; }
   function interact() {
-    const hit = sceneObjects().find(o => Math.abs((o.x+o.w/2)-player.x) < Math.max(80,o.w/2+30) && Math.abs((o.y+o.h/2)-player.y) < Math.max(120,o.h));
-    if (hit?.dialogue) showDialogue(hit.dialogue);
-    const trig = sceneObjects().find(o => o.type === "trigger" && player.x >= o.x && player.x <= o.x+o.w && player.y >= o.y && player.y <= o.y+o.h);
-    if (trig?.targetSceneId) { activeSceneId = trig.targetSceneId; spawnPlayer(); showDialogue(trig.dialogue || ("Entered " + scene().name)); }
+    findNear();
+    if (!near) { const hit = sceneObjects().find(o => Math.abs((o.x+o.w/2)-player.x) < Math.max(80,o.w/2+30) && Math.abs((o.y+o.h/2)-player.y) < Math.max(120,o.h)); if (hit?.dialogue) showDialogue(hit.dialogue); return; }
+    if (near.type === "car_model") { const part = nextRemovableCarPart(near); if (!part) return; const removed = removedCarParts.get(near.id) || new Set(); removed.add(part.id); removedCarParts.set(near.id, removed); const broken = Math.random()*100 < (part.breakChance || 0); if (!broken) cash += part.reward || part.pay || 0; showDialogue("You remove " + (part.name || "part") + ". " + (broken ? "It broke while coming loose." : "It came out clean.")); return; }
+    if (near.action === "travel" && near.targetSceneId) goToScene(near.targetSceneId, near.dialogue || "You enter " + scene().name + ".");
+    else showDialogue(near.dialogue || near.prompt || "Interaction complete.");
   }
 
   function update(dt) {
     const left = keys.has("ArrowLeft") || keys.has("KeyA"), right = keys.has("ArrowRight") || keys.has("KeyD");
-    const dir = right - left; player.walking = !!dir; if (dir) player.facing = dir;
+    const dir = player.knocked ? 0 : right - left; player.walking = !!dir; if (dir) player.facing = dir;
     player.crawling = keys.has("ArrowDown") || keys.has("KeyC") || keys.has("ControlLeft");
-    player.x = clamp(player.x + dir * (player.crawling ? project.player.crawlSpeed || 95 : project.player.walkSpeed || 165) * dt, 0, project.world.width || 5000);
+    const nextX = clamp(player.x + dir * (player.crawling ? project.player.crawlSpeed || 95 : project.player.walkSpeed || 165) * dt, 0, project.world.width || 5000);
+    if (!blockedByMovingBus(nextX, player.x)) player.x = nextX; else player.walking = false;
+    updateBusHazards(); updateParticles(dt); findNear();
     cameraX = clamp(player.x - innerWidth*.45, 0, Math.max(0, (project.world.width || 5000) - innerWidth));
-    const trig = sceneObjects().find(o => o.type === "trigger" && player.x >= o.x && player.x <= o.x+o.w && player.y >= o.y && player.y <= o.y+o.h);
-    if (trig?.targetSceneId) { activeSceneId = trig.targetSceneId; spawnPlayer(); if (trig.dialogue) showDialogue(trig.dialogue); }
     if (dialogueUntil && elapsed > dialogueUntil) document.getElementById("dialogue").style.display="none";
   }
-
   function draw() {
     const scale = canvas.height / (project.world.height || 720); const viewportW = canvas.width / scale;
     ctx.clearRect(0,0,canvas.width,canvas.height); ctx.save(); ctx.scale(scale,scale);
     const sky = ctx.createLinearGradient(0,0,0,project.world.height||720); sky.addColorStop(0,"#7d918e"); sky.addColorStop(.7,"#b3aa8b"); sky.addColorStop(1,"#76705a"); ctx.fillStyle=sky; ctx.fillRect(0,0,viewportW,project.world.height||720);
     for (const layer of visibleLayers()) { ctx.save(); const off = cameraX*(layer.parallax||1); ctx.translate(-off,0); drawLayerBackdrop(layer,cameraX,viewportW); sceneObjects().filter(o => o.layer === layer.id && !o.alwaysOnTop).forEach(drawObject); ctx.restore(); }
     for (const layer of visibleLayers()) { ctx.save(); const off = cameraX*(layer.parallax||1); ctx.translate(-off,0); sceneObjects().filter(o => o.layer === layer.id && o.alwaysOnTop).forEach(drawObject); ctx.restore(); }
-    ctx.save(); ctx.translate(-cameraX,0); drawPlayer(); ctx.restore(); ctx.restore();
-    document.getElementById("sceneName").textContent = scene().name || "Scene";
-    const minutes = Math.floor(7*60 + elapsed*8); document.getElementById("clock").textContent = String(Math.floor(minutes/60)%24).padStart(2,"0") + ":" + String(minutes%60).padStart(2,"0");
+    ctx.save(); ctx.translate(-cameraX,0); particles.forEach(p => { const t=clamp(p.age/p.life,0,1); ctx.globalAlpha=(1-t)*.42; ctx.fillStyle="#d8c99e"; ctx.beginPath(); ctx.ellipse(p.x,p.y,p.size*(1+t),p.size*.45,0,0,Math.PI*2); ctx.fill(); }); drawPlayer(); ctx.restore(); ctx.restore();
+    document.getElementById("sceneName").textContent = (scene().name || "Scene") + (near ? " · E: " + (near.prompt || near.name || "Interact") : "");
+    const minutes = Math.floor(7*60 + elapsed*8); document.getElementById("clock").textContent = String(Math.floor(minutes/60)%24).padStart(2,"0") + ":" + String(minutes%60).padStart(2,"0") + "  $" + cash;
   }
-
   function loop(now){ const dt=Math.min(.04,(now-last)/1000||0); last=now; elapsed+=dt; update(dt); draw(); requestAnimationFrame(loop); }
   requestAnimationFrame(loop);
 })();
@@ -4278,6 +4315,25 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
         const writable = await file.createWritable();
         await writable.write(new Blob([html], { type: "text/html" }));
         await writable.close();
+        const soundPaths = new Set(["soundAssets/bus_horn.mp3", "soundAssets/bus_idle.mp3"]);
+        (exportProject.objects || []).forEach(object => {
+          if (object.honkSound) soundPaths.add(object.honkSound);
+          if (object.engineSound) soundPaths.add(object.engineSound);
+        });
+        for (const soundPath of soundPaths) {
+          if (!String(soundPath).startsWith("soundAssets/")) continue;
+          try {
+            const response = await fetch(soundPath);
+            if (!response.ok) continue;
+            const soundDir = await dir.getDirectoryHandle("soundAssets", { create: true });
+            const soundFile = await soundDir.getFileHandle(String(soundPath).split("/").pop(), { create: true });
+            const soundWritable = await soundFile.createWritable();
+            await soundWritable.write(await response.blob());
+            await soundWritable.close();
+          } catch (error) {
+            console.warn("Could not copy sound into exported game", soundPath, error);
+          }
+        }
         $("#saveState").textContent = `Standalone game exported to folder as ${filename}`;
         alert("Standalone game exported. Open index.html inside the folder to test it.");
         return;
