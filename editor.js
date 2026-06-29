@@ -4115,12 +4115,188 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     if (!confirm("Start a new project? Use Save Project first if you want to keep this version.")) return;
     project = normalizeProject(starterProject()); selectionId = null; cameraX = 0; rebuildAll(); markDirty();
   };
+  function buildStandaloneGameHtml(projectData) {
+    const gameData = JSON.stringify(projectData).replace(/<\/script/gi, "<\\/script");
+    return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(projectData.name || "BoltWorks Game")}</title>
+  <style>
+    html, body { margin:0; height:100%; background:#070908; color:#f4e8c4; font-family:system-ui,Segoe UI,sans-serif; overflow:hidden; }
+    #game { width:100vw; height:100vh; display:block; background:#10150f; image-rendering:auto; }
+    .hud { position:fixed; left:14px; top:12px; display:flex; gap:14px; align-items:center; background:rgba(4,6,4,.65); border:1px solid rgba(255,209,90,.22); border-radius:10px; padding:8px 12px; backdrop-filter:blur(4px); }
+    .hint { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); background:rgba(4,6,4,.74); border:1px solid rgba(255,209,90,.24); border-radius:12px; padding:10px 14px; color:#e8d49b; }
+    .dialogue { position:fixed; left:50%; bottom:76px; transform:translateX(-50%); max-width:min(760px, calc(100vw - 40px)); background:rgba(12,15,12,.92); border:1px solid #d9aa45; border-radius:14px; padding:16px 20px; color:#fff4cf; font-size:18px; box-shadow:0 12px 40px rgba(0,0,0,.45); display:none; }
+    .mobile { position:fixed; inset:auto 0 0 0; display:none; justify-content:space-between; padding:22px; pointer-events:none; }
+    .mobile button { pointer-events:auto; width:66px; height:66px; border-radius:50%; border:1px solid rgba(255,209,90,.38); background:rgba(17,22,16,.82); color:#ffd15a; font-size:26px; }
+    @media (pointer:coarse) { .mobile { display:flex; } .hint { bottom:100px; } }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div class="hud"><strong>${escapeHtml(projectData.name || "BoltWorks Game")}</strong><span id="sceneName"></span><span id="clock">07:00</span></div>
+  <div id="dialogue" class="dialogue"></div>
+  <div class="hint">Move: A/D or arrows · Interact: E / Space / Enter · Crawl: C / Down</div>
+  <div class="mobile"><div><button data-key="ArrowLeft">?</button><button data-key="ArrowRight">?</button></div><div><button data-key="KeyE">E</button></div></div>
+  <script id="boltworks-data" type="application/json">${gameData}</script>
+  <script>
+(() => {
+  const project = JSON.parse(document.getElementById("boltworks-data").textContent);
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const keys = new Set();
+  const images = new Map();
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+  const bodyParts = ["backArm", "backLeg", "head", "torso", "frontLeg", "frontArm"];
+  let activeSceneId = project.activeSceneId || project.scenes?.[0]?.id || "main";
+  let cameraX = 0, last = performance.now(), elapsed = 0, dialogueUntil = 0;
+  let player = { x: project.player?.spawnX || 120, y: 0, facing: 1, walking:false, crawling:false };
+
+  function scene() { return project.scenes?.find(s => s.id === activeSceneId) || project.scenes?.[0] || { id:"main", name:"Scene" }; }
+  function sceneObjects() { return (project.objects || []).filter(o => (o.sceneId || project.activeSceneId || activeSceneId) === activeSceneId && o.visible !== false); }
+  function visibleLayers() { return (project.layers || []).filter(l => l.visible !== false); }
+  function groundY() { return (project.world?.height || 720) - (project.world?.groundHeight || 150); }
+  function layerById(id) { return (project.layers || []).find(l => l.id === id) || { id:"ground", parallax:1, color:"#697463" }; }
+  function assetImage(id) { return id ? images.get(id) : null; }
+  function sceneArt(slot) { return project.sceneArt?.[slot] || {}; }
+  function sceneArtImage(slot) { return assetImage(sceneArt(slot).assetId); }
+  function objectBlendMode(o) { return ["source-over","multiply","screen","overlay","soft-light"].includes(o?.blendMode) ? o.blendMode : "source-over"; }
+  function escapeText(text) { return String(text || ""); }
+  function resize() { const dpr = Math.min(devicePixelRatio || 1, 2); canvas.width = Math.round(innerWidth*dpr); canvas.height = Math.round(innerHeight*dpr); }
+  addEventListener("resize", resize); resize();
+
+  (project.assets || []).forEach(asset => { const img = new Image(); img.src = asset.src; images.set(asset.id, img); });
+  addEventListener("keydown", e => { keys.add(e.code); if (["Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.code)) e.preventDefault(); if (["Space","Enter","KeyE"].includes(e.code)) interact(); });
+  addEventListener("keyup", e => keys.delete(e.code));
+  document.querySelectorAll("[data-key]").forEach(btn => { btn.onpointerdown = () => keys.add(btn.dataset.key); btn.onpointerup = btn.onpointercancel = () => keys.delete(btn.dataset.key); });
+
+  function spawnPlayer() {
+    const start = sceneObjects().find(o => o.type === "player_start_here" || o.type === "spawn");
+    player.x = start ? start.x + start.w / 2 : project.player?.spawnX || 120;
+    player.y = groundY();
+  }
+  spawnPlayer();
+
+  function drawSceneArtLayer(slot, layer, viewX, viewportW, fallback) {
+    const art = sceneArt(slot), img = sceneArtImage(slot), gy = groundY();
+    if (!img?.complete || !img.naturalWidth) { if (fallback) fallback(); return; }
+    const drawHeight = art.height || (slot === "ground" ? (project.world?.groundHeight || 150) : img.naturalHeight);
+    const scale = drawHeight / img.naturalHeight;
+    const drawWidth = img.naturalWidth * scale;
+    const y = slot === "ground" ? gy + (art.yOffset || 0) : slot === "background" ? (art.yOffset || 0) : gy - drawHeight + (art.yOffset || 0);
+    if (art.mode === "tile") {
+      const step = Math.max(1, drawWidth + (art.spacing || 0));
+      const start = Math.floor((viewX * (layer?.parallax || 0) - step) / step) * step;
+      for (let x=start; x<start+viewportW+step*2; x+=step) ctx.drawImage(img, x, y, drawWidth, drawHeight);
+    } else {
+      ctx.drawImage(img, slot === "background" ? viewX * (layer?.parallax || 0) : 0, y, slot === "background" ? viewportW : (project.world?.width || 5000), slot === "background" ? (project.world?.height || 720) : drawHeight);
+    }
+  }
+
+  function drawLayerBackdrop(layer, viewX, viewportW) {
+    const gy = groundY();
+    if (layer.id === "background") drawSceneArtLayer("background", layer, viewX, viewportW);
+    if (layer.id === "far") drawSceneArtLayer("far", layer, viewX, viewportW, () => {
+      ctx.fillStyle = layer.color || "#697463"; const start = Math.floor((viewX*layer.parallax-500)/600)*600;
+      for (let x=start; x<start+viewportW+1400; x+=600) { ctx.beginPath(); ctx.moveTo(x,gy+10); ctx.lineTo(x+140,330); ctx.lineTo(x+310,gy+10); ctx.fill(); ctx.fillRect(x+380,360,80,gy-360); ctx.fillRect(x+455,430,100,gy-430); }
+    });
+    if (layer.id === "ground") { ctx.fillStyle = layer.color || "#696a52"; ctx.fillRect(0, gy, project.world.width, project.world.groundHeight || 150); drawSceneArtLayer("ground", layer, viewX, viewportW); }
+    if (layer.id === "front") drawSceneArtLayer("front", layer, viewX, viewportW, () => { ctx.fillStyle="#252b21"; for(let x=Math.floor((viewX*layer.parallax-200)/430)*430; x<viewX+viewportW+900; x+=430){ctx.beginPath();ctx.moveTo(x,project.world.height);ctx.lineTo(x+24,635);ctx.lineTo(x+50,project.world.height);ctx.fill();} });
+  }
+
+  function drawObject(o) {
+    if (o.type === "trigger" || o.type === "player_start_here" || o.type === "spawn") return;
+    ctx.save(); ctx.globalAlpha = clamp(Number(o.opacity ?? 1),0,1); ctx.globalCompositeOperation = objectBlendMode(o);
+    ctx.translate(o.x + o.w/2, o.y + o.h/2); ctx.rotate((o.rotation||0)*Math.PI/180); ctx.scale(o.flip?-1:1,1); ctx.translate(-o.w/2,-o.h/2);
+    const img = assetImage(o.assetId) || (o.type === "bus" ? sceneArtImage("bus") : o.type === "bus-stop" ? sceneArtImage("busStop") : null);
+    if (img?.complete && img.naturalWidth) ctx.drawImage(img,0,0,o.w,o.h);
+    else { ctx.fillStyle = o.type === "bus" ? "#b88a32" : o.type === "npc" ? "#59634e" : "#697463"; ctx.fillRect(0,0,o.w,o.h); }
+    ctx.restore();
+  }
+
+  function partSize(part, t) { const img = assetImage(t?.assetId); return img?.naturalWidth ? { w: img.naturalWidth*(t.scale||1), h: img.naturalHeight*(t.scale||1) } : { w: part === "head" ? 54 : part.includes("Leg") ? 22 : 42, h: part === "head" ? 54 : part.includes("Leg") ? 90 : 80 }; }
+  function partAnchor(part, s) { return part === "head" || part === "torso" ? { x:-s.w/2, y:-s.h/2 } : { x:-s.w/2, y:0 }; }
+  function drawPlayer() {
+    const character = project.character; if (!character) return;
+    const anim = player.walking ? "walking" : "standing";
+    const frames = character.animations?.[anim] || character.animations?.standing || [];
+    const frame = frames[Math.floor(elapsed * (character.animationFps?.[anim] || character.fps || 8)) % Math.max(1, frames.length)]; if (!frame) return;
+    ctx.save(); ctx.translate(player.x, player.y); ctx.scale(player.facing < 0 ? -1 : 1, 1); ctx.translate(-character.width/2, -character.height + 22);
+    (character.partOrder || bodyParts).forEach(part => { const t = frame.parts?.[part]; if (!t) return; const img = assetImage(t.assetId); const s = partSize(part,t); const a = partAnchor(part,s); ctx.save(); ctx.translate(t.x||0,t.y||0); ctx.rotate((t.rotation||0)*Math.PI/180); ctx.scale(t.flip?-1:1,1); if (img?.complete && img.naturalWidth) ctx.drawImage(img,a.x,a.y,s.w,s.h); else { ctx.fillStyle = part === "head" ? "#bd9272" : "#365f56"; ctx.fillRect(a.x,a.y,s.w,s.h); } ctx.restore(); });
+    ctx.restore();
+  }
+
+  function showDialogue(text) { const box=document.getElementById("dialogue"); box.textContent=text; box.style.display="block"; dialogueUntil=elapsed+4; }
+  function interact() {
+    const hit = sceneObjects().find(o => Math.abs((o.x+o.w/2)-player.x) < Math.max(80,o.w/2+30) && Math.abs((o.y+o.h/2)-player.y) < Math.max(120,o.h));
+    if (hit?.dialogue) showDialogue(hit.dialogue);
+    const trig = sceneObjects().find(o => o.type === "trigger" && player.x >= o.x && player.x <= o.x+o.w && player.y >= o.y && player.y <= o.y+o.h);
+    if (trig?.targetSceneId) { activeSceneId = trig.targetSceneId; spawnPlayer(); showDialogue(trig.dialogue || ("Entered " + scene().name)); }
+  }
+
+  function update(dt) {
+    const left = keys.has("ArrowLeft") || keys.has("KeyA"), right = keys.has("ArrowRight") || keys.has("KeyD");
+    const dir = right - left; player.walking = !!dir; if (dir) player.facing = dir;
+    player.crawling = keys.has("ArrowDown") || keys.has("KeyC") || keys.has("ControlLeft");
+    player.x = clamp(player.x + dir * (player.crawling ? project.player.crawlSpeed || 95 : project.player.walkSpeed || 165) * dt, 0, project.world.width || 5000);
+    cameraX = clamp(player.x - innerWidth*.45, 0, Math.max(0, (project.world.width || 5000) - innerWidth));
+    const trig = sceneObjects().find(o => o.type === "trigger" && player.x >= o.x && player.x <= o.x+o.w && player.y >= o.y && player.y <= o.y+o.h);
+    if (trig?.targetSceneId) { activeSceneId = trig.targetSceneId; spawnPlayer(); if (trig.dialogue) showDialogue(trig.dialogue); }
+    if (dialogueUntil && elapsed > dialogueUntil) document.getElementById("dialogue").style.display="none";
+  }
+
+  function draw() {
+    const scale = canvas.height / (project.world.height || 720); const viewportW = canvas.width / scale;
+    ctx.clearRect(0,0,canvas.width,canvas.height); ctx.save(); ctx.scale(scale,scale);
+    const sky = ctx.createLinearGradient(0,0,0,project.world.height||720); sky.addColorStop(0,"#7d918e"); sky.addColorStop(.7,"#b3aa8b"); sky.addColorStop(1,"#76705a"); ctx.fillStyle=sky; ctx.fillRect(0,0,viewportW,project.world.height||720);
+    for (const layer of visibleLayers()) { ctx.save(); const off = cameraX*(layer.parallax||1); ctx.translate(-off,0); drawLayerBackdrop(layer,cameraX,viewportW); sceneObjects().filter(o => o.layer === layer.id && !o.alwaysOnTop).forEach(drawObject); ctx.restore(); }
+    for (const layer of visibleLayers()) { ctx.save(); const off = cameraX*(layer.parallax||1); ctx.translate(-off,0); sceneObjects().filter(o => o.layer === layer.id && o.alwaysOnTop).forEach(drawObject); ctx.restore(); }
+    ctx.save(); ctx.translate(-cameraX,0); drawPlayer(); ctx.restore(); ctx.restore();
+    document.getElementById("sceneName").textContent = scene().name || "Scene";
+    const minutes = Math.floor(7*60 + elapsed*8); document.getElementById("clock").textContent = String(Math.floor(minutes/60)%24).padStart(2,"0") + ":" + String(minutes%60).padStart(2,"0");
+  }
+
+  function loop(now){ const dt=Math.min(.04,(now-last)/1000||0); last=now; elapsed+=dt; update(dt); draw(); requestAnimationFrame(loop); }
+  requestAnimationFrame(loop);
+})();
+  <\/script>
+</body>
+</html>`;
+  }
+
+  async function exportStandaloneGame() {
+    project.updatedAt = Date.now();
+    const exportProject = normalizeProject(JSON.parse(JSON.stringify(project)));
+    const html = buildStandaloneGameHtml(exportProject);
+    const filename = "index.html";
+    if (window.showDirectoryPicker) {
+      try {
+        const dir = await window.showDirectoryPicker({ mode: "readwrite" });
+        const file = await dir.getFileHandle(filename, { create: true });
+        const writable = await file.createWritable();
+        await writable.write(new Blob([html], { type: "text/html" }));
+        await writable.close();
+        $("#saveState").textContent = `Standalone game exported to folder as ${filename}`;
+        alert("Standalone game exported. Open index.html inside the folder to test it.");
+        return;
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+        console.warn("Folder export failed, falling back to single-file download", error);
+      }
+    }
+    const blob = new Blob([html], { type: "text/html" });
+    const savedName = await saveBlobAs(blob, `${safeProjectName("boltworks-game")}-game.html`, ".html", "Standalone HTML game");
+    if (savedName) $("#saveState").textContent = `Standalone game exported: ${savedName}`;
+  }
   $("#exportProject").onclick = async () => {
     project.updatedAt = Date.now();
     const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
     const savedName = await saveBlobAs(blob, `${safeProjectName("boltworks-project")}.boltworks`, ".boltworks", "BoltWorks Studio project");
     if (savedName) $("#saveState").textContent = `Project file saved: ${savedName}`;
   };
+  if ($("#exportGame")) $("#exportGame").onclick = exportStandaloneGame;
   $("#importProject").onclick = () => $("#projectFile").click();
   $("#projectFile").onchange = async event => {
     try {

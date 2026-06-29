@@ -30,6 +30,12 @@ Then open:
 http://localhost:8080
 ```
 
+## Export playable game
+
+Use **Export game** to create a standalone player-only build. When the browser supports folder writing, BoltWorks Studio asks you to choose a folder and writes `index.html` into it. If folder writing is unavailable, it downloads a single self-contained `*-game.html` file instead.
+
+This exported build does not include the editor panels, Asset Studio, Character Animator, or project-editing tools. It is an early runtime export, so it is meant for testing and will become more complete as the game systems grow.
+
 ## Saving and asset storage
 
 - **Autosave:** the working project is saved in the browser's local storage/IndexedDB on your hard drive.
