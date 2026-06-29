@@ -4192,7 +4192,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
 
   function playSound(path) {
     if (!path) return;
-    try { const audio = new Audio(path); audio.volume = .55; audio.play().catch(() => {}); } catch {}
+    try { const source = project.exportedSounds?.[path] || path; const audio = new Audio(source); audio.volume = .55; audio.play().catch(() => {}); } catch {}
   }
   function stateForBus(bus) { if (!busState.has(bus.id)) busState.set(bus.id, {}); return busState.get(bus.id); }
   function rawBusProgress(bus) { const st = stateForBus(bus); if (Number.isFinite(st.startedAt)) return (elapsed - st.startedAt) / Math.max(.1, Number(bus.busDuration) || 4); return (elapsed - (Number(bus.busDelay) || 5)) / Math.max(.1, Number(bus.busDuration) || 4); }
@@ -4258,7 +4258,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     const anim = player.crawling ? "crawling" : player.walking ? "walking" : "standing";
     const frames = character.animations?.[anim] || character.animations?.standing || [];
     const frame = frames[Math.floor(elapsed * (character.animationFps?.[anim] || character.fps || 8)) % Math.max(1, frames.length)]; if (!frame) return;
-    ctx.save(); ctx.translate(player.x, player.y); if (player.knocked) { const fall = clamp((elapsed - player.fallAt) / .45, 0, 1); ctx.rotate(-Math.PI/2*fall); ctx.translate(-character.height*.18*fall, -character.height*.22*fall); } ctx.scale(player.facing < 0 ? -1 : 1, 1); ctx.translate(-character.width/2, -character.height + 22);
+    ctx.save(); ctx.translate(player.x, player.y); if (player.knocked) { const fall = clamp((elapsed - player.fallAt) / .45, 0, 1); ctx.rotate(-Math.PI/2*fall); ctx.translate(-character.height*.18*fall, -character.height*.22*fall); } const characterScale = .62; ctx.scale(characterScale * (player.facing < 0 ? -1 : 1), characterScale); ctx.translate(-character.width/2, -character.height + 22);
     (character.partOrder || bodyParts).forEach(part => { const t = frame.parts?.[part]; if (!t) return; const img = assetImage(t.assetId); const s = partSize(part,t); const a = partAnchor(part,s); ctx.save(); ctx.translate(t.x||0,t.y||0); ctx.rotate((t.rotation||0)*Math.PI/180); ctx.scale(t.flip?-1:1,1); if (img?.complete && img.naturalWidth) ctx.drawImage(img,a.x,a.y,s.w,s.h); else { ctx.fillStyle = part === "head" ? "#bd9272" : "#365f56"; ctx.fillRect(a.x,a.y,s.w,s.h); } ctx.restore(); });
     ctx.restore();
   }
@@ -4303,9 +4303,40 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
 </html>`;
   }
 
+
+  async function blobToDataUrl(blob) {
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function collectStandaloneSounds(exportProject) {
+    const sounds = {};
+    const soundPaths = new Set(["soundAssets/bus_horn.mp3", "soundAssets/bus_idle.mp3"]);
+    (exportProject.objects || []).forEach(object => {
+      if (object.honkSound) soundPaths.add(object.honkSound);
+      if (object.engineSound) soundPaths.add(object.engineSound);
+    });
+    for (const soundPath of soundPaths) {
+      if (!String(soundPath).startsWith("soundAssets/")) continue;
+      try {
+        const response = await fetch(soundPath);
+        if (!response.ok) continue;
+        sounds[soundPath] = await blobToDataUrl(await response.blob());
+      } catch (error) {
+        console.warn("Could not embed standalone sound", soundPath, error);
+      }
+    }
+    return sounds;
+  }
+
   async function exportStandaloneGame() {
     project.updatedAt = Date.now();
     const exportProject = normalizeProject(JSON.parse(JSON.stringify(project)));
+    exportProject.exportedSounds = await collectStandaloneSounds(exportProject);
     const html = buildStandaloneGameHtml(exportProject);
     const filename = "index.html";
     if (window.showDirectoryPicker) {
