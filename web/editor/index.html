@@ -1,0 +1,59 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BoltWorks Studio Web</title>
+  <link rel="icon" href="assets/branding/favicon.png" />
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/studio.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="rail" aria-label="Modules">
+      <img class="rail-logo" src="assets/branding/boltworks-icon-64.png" alt="BoltWorks" />
+      <button class="rail-button active" data-module="scene" title="Scene Builder">▦</button>
+      <button class="rail-button" data-module="assets" title="Asset Studio">◰</button>
+      <button class="rail-button" data-module="character" title="Character Animator">☻</button>
+      <button class="rail-button" data-module="parts" title="Part Builder">⚙</button>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div class="brand-block">
+          <strong>BoltWorks Studio</strong>
+          <span>Build. Animate. Design. Play.</span>
+        </div>
+        <div class="top-actions">
+          <button id="newProjectBtn">New</button>
+          <button id="openProjectBtn">Open Project</button>
+          <button id="saveProjectBtn">Save Project</button>
+          <button id="playPreviewBtn" class="accent">Play Preview</button>
+        </div>
+      </header>
+
+      <section class="main-grid">
+        <aside id="leftPanel" class="panel left-panel"></aside>
+        <section id="centerPanel" class="center-panel"></section>
+        <aside id="rightPanel" class="panel inspector-panel"></aside>
+      </section>
+
+      <footer class="statusbar">
+        <span id="statusText">Ready.</span>
+      </footer>
+    </main>
+  </div>
+
+  <input id="assetFileInput" type="file" accept="image/*" multiple hidden />
+  <input id="projectFileInput" type="file" accept="application/json,.json,.boltworks" hidden />
+
+  <script src="js/core/utils.js"></script>
+  <script src="js/core/state.js"></script>
+  <script src="js/core/image-utils.js"></script>
+  <script src="js/core/shell.js"></script>
+  <script src="js/modules/scene-builder/scene-builder.js"></script>
+  <script src="js/modules/asset-studio/asset-studio.js"></script>
+  <script src="js/modules/character-animator/character-animator.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
