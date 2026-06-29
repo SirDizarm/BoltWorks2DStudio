@@ -4157,6 +4157,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   const removedCarParts = new Map();
   let near = null, blockedBusId = null, blockStartedAt = 0, lastHornAt = -999, honkBusId = null, honkFlashUntil = 0;
   let particles = [];
+  const loopingSounds = new Map();
   let audioUnlocked = false;
   const queuedSounds = [];
 
@@ -4196,25 +4197,41 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   function playSound(path) {
     if (!path) return;
     const source = project.exportedSounds?.[path] || path;
-    if (!audioUnlocked) { queuedSounds.push(source); return; }
+    if (!audioUnlocked) { queuedSounds.push({ source, loop:false }); return; }
     try { const audio = new Audio(source); audio.volume = .65; audio.play().catch(() => {}); } catch {}
+  }
+  function playLoopingSound(key, path, volume = .45) {
+    if (!path) return;
+    const source = project.exportedSounds?.[path] || path;
+    if (!audioUnlocked) { queuedSounds.push({ source, loop:true, key, volume }); return; }
+    try {
+      let audio = loopingSounds.get(key);
+      if (!audio || audio.src !== source) {
+        audio = new Audio(source);
+        audio.loop = true;
+        audio.volume = volume;
+        loopingSounds.set(key, audio);
+      }
+      audio.play().catch(() => {});
+    } catch {}
   }
   function unlockAudio() {
     audioUnlocked = true;
     while (queuedSounds.length) {
-      const source = queuedSounds.shift();
-      try { const audio = new Audio(source); audio.volume = .65; audio.play().catch(() => {}); } catch {}
+      const item = queuedSounds.shift();
+      const source = typeof item === "string" ? item : item.source;
+      try { const audio = new Audio(source); audio.loop = !!item.loop; audio.volume = item.volume || .65; if (item.key) loopingSounds.set(item.key, audio); audio.play().catch(() => {}); } catch {}
     }
   }
   function stateForBus(bus) { if (!busState.has(bus.id)) busState.set(bus.id, {}); return busState.get(bus.id); }
   function rawBusProgress(bus) { const st = stateForBus(bus); if (Number.isFinite(st.startedAt)) return (elapsed - st.startedAt) / Math.max(.1, Number(bus.busDuration) || 4); return (elapsed - (Number(bus.busDelay) || 5)) / Math.max(.1, Number(bus.busDuration) || 4); }
-  function busProgress(bus) { return clamp(blockedBusId === bus.id ? 0 : rawBusProgress(bus), 0, 1); }
+  function busProgress(bus) { const st = stateForBus(bus); return clamp(blockedBusId === bus.id && !st.runningOver ? 0 : rawBusProgress(bus), 0, 1); }
   function busVisualScale(bus) { const start = clamp(Number(bus.busStartScale) || .59, .05, 1.5); const end = clamp(Number(bus.busEndScale) || 1, .5, 3); return start + (end - start) * busProgress(bus); }
   function playerBlocksBus(bus) { const scale = busVisualScale(bus); const cx = bus.x + bus.w / 2 + (Number(bus.busDriftX) || 0) * busProgress(bus); const half = Math.max(55, bus.w * scale * .55); return player.x >= cx - half - 35 && player.x <= cx + half + 35; }
   function busBlocksPlayerAt(bus, x) { const st = stateForBus(bus); const moving = st.departed || Number.isFinite(st.startedAt) || rawBusProgress(bus) >= 0; if (!moving || busProgress(bus) >= 1) return false; return player.y >= bus.y - 20 && player.y <= bus.y + bus.h + 30 && x + 24 >= bus.x && x - 24 <= bus.x + bus.w; }
   function blockedByMovingBus(nextX, currentX) { return sceneObjects().some(o => { if (o.visible === false || o.type !== "bus") return false; if (!busBlocksPlayerAt(o, nextX)) return false; if (!busBlocksPlayerAt(o, currentX)) return true; const center = o.x + o.w / 2; return Math.abs(nextX - center) <= Math.abs(currentX - center); }); }
-  function startBus(bus) { const st = stateForBus(bus); if (!st.departed) { st.departed = true; st.startedAt = elapsed; playSound(bus.engineSound || "soundAssets/bus_idle.mp3"); spawnBusGust(bus, true); } }
-  function forceBusRunOver(bus) { const st = stateForBus(bus); st.departed = true; st.startedAt = elapsed; playSound(bus.engineSound || "soundAssets/bus_idle.mp3"); spawnBusGust(bus, true); }
+  function startBus(bus) { const st = stateForBus(bus); if (!st.departed) { st.departed = true; st.startedAt = elapsed; playLoopingSound("bus-engine-" + bus.id, bus.engineSound || "soundAssets/bus_idle.mp3"); spawnBusGust(bus, true); } }
+  function forceBusRunOver(bus) { const st = stateForBus(bus); st.departed = true; st.runningOver = true; st.startedAt = elapsed; playLoopingSound("bus-engine-" + bus.id, bus.engineSound || "soundAssets/bus_idle.mp3"); spawnBusGust(bus, true); }
   function honk(bus) { honkBusId = bus.id; if (elapsed - lastHornAt >= 1.15) { if (honkTextureId) bus.honkAssetId = honkTextureId; honkFlashUntil = elapsed + .38; playSound(bus.honkSound || "soundAssets/bus_horn.mp3"); lastHornAt = elapsed; } }
   function updateBusHazards() {
     for (const bus of sceneObjects().filter(o => o.type === "bus" && o.visible !== false)) {
@@ -4224,7 +4241,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       if (!playerBlocksBus(bus)) { if (blockedBusId === bus.id) { blockedBusId = null; blockStartedAt = 0; honkBusId = null; } startBus(bus); continue; }
       if (blockedBusId !== bus.id) { blockedBusId = bus.id; blockStartedAt = elapsed; lastHornAt = -999; }
       honk(bus);
-      if (elapsed - blockStartedAt >= (Number(bus.busRunOverAfter) || 7)) { player.knocked = true; player.fallAt = elapsed; forceBusRunOver(bus); blockedBusId = null; blockStartedAt = 0; honkBusId = null; setTimeout(() => goToScene("hospital", "You wake up at the hospital."), 900); }
+      if (elapsed - blockStartedAt >= (Number(bus.busRunOverAfter) || 7)) { player.knocked = true; player.fallAt = elapsed; blockedBusId = null; forceBusRunOver(bus); blockStartedAt = 0; honkBusId = null; setTimeout(() => goToScene("hospital", "You wake up at the hospital."), 900); }
       break;
     }
   }
