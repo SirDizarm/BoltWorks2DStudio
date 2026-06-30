@@ -1814,6 +1814,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   function updatePaintControls() {
     if ($("#paintSizeValue")) $("#paintSizeValue").textContent = `${$("#paintSize")?.value || 8}px`;
     if ($("#paintOpacityValue")) $("#paintOpacityValue").textContent = `${$("#paintOpacity")?.value || 100}%`;
+    if ($("#paintSprayToleranceValue")) $("#paintSprayToleranceValue").textContent = `${$("#paintSprayTolerance")?.value || 20}`;
     const hasPendingPaint = assetPaintPending?.assetId === selectedAssetId;
     if ($("#paintUndo")) $("#paintUndo").disabled = !hasPendingPaint;
     if ($("#paintSave")) $("#paintSave").disabled = !hasPendingPaint;
@@ -1843,7 +1844,8 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       tool: assetPaintTool,
       color: $("#paintColor")?.value || "#ffd15a",
       size: clamp(+("0" + ($("#paintSize")?.value || 8)), 1, 80),
-      opacity: clamp(+("0" + ($("#paintOpacity")?.value || 100)), 1, 100) / 100
+      opacity: clamp(+("0" + ($("#paintOpacity")?.value || 100)), 1, 100) / 100,
+      sprayTolerance: clamp(+("0" + ($("#paintSprayTolerance")?.value || 20)), 0, 100)
     };
   }
 
@@ -1862,9 +1864,13 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     } else if (settings.tool === "spray") {
       const radius = settings.size / 2;
       const dots = Math.max(8, Math.round(settings.size * 2.5));
+      const base = hexToRgb(settings.color || "#ffd15a");
+      const tolerance = settings.sprayTolerance || 0;
       for (let i = 0; i < dots; i++) {
         const angle = Math.random() * Math.PI * 2;
         const distance = Math.sqrt(Math.random()) * radius;
+        const jitter = () => Math.round((Math.random() * 2 - 1) * tolerance);
+        ctx.fillStyle = `rgb(${clamp(base.r + jitter(), 0, 255)}, ${clamp(base.g + jitter(), 0, 255)}, ${clamp(base.b + jitter(), 0, 255)})`;
         ctx.globalAlpha = settings.opacity * (.25 + Math.random() * .45);
         ctx.beginPath();
         ctx.arc(point.x + Math.cos(angle) * distance, point.y + Math.sin(angle) * distance, Math.max(.6, settings.size / 18), 0, Math.PI * 2);
@@ -2167,6 +2173,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   if ($("#paintEraseTool")) $("#paintEraseTool").onclick = () => setAssetPaintTool("erase");
   if ($("#paintSize")) $("#paintSize").oninput = () => { updatePaintControls(); drawAssetPreview(); };
   if ($("#paintOpacity")) $("#paintOpacity").oninput = () => { updatePaintControls(); drawAssetPreview(); };
+  if ($("#paintSprayTolerance")) $("#paintSprayTolerance").oninput = () => { updatePaintControls(); drawAssetPreview(); };
   if ($("#pickPaintColor")) $("#pickPaintColor").onclick = async () => {
     paintColorPickActive = false;
     if (assetPreview) assetPreview.classList.remove("picking-color");
@@ -4988,14 +4995,19 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     if ($("#carBuilder")?.classList.contains("active")) renderCarBuilder();
   }
 
+  function isTypingTarget(target) {
+    return !!target?.closest?.("input, textarea, select, [contenteditable=true]");
+  }
+
   window.addEventListener("keydown", event => {
+    if (isTypingTarget(event.target)) return;
     keys[event.code] = true;
     if (!playing && (event.ctrlKey || event.metaKey) && event.code === "KeyZ" && $("#characterAnimator").classList.contains("active")) {
       event.preventDefault();
       undoCharacterEdit();
       return;
     }
-    if (!playing && !event.target.matches("input,textarea,select")) {
+    if (!playing) {
       if (event.code === "Delete" && selectionId) $("#deleteObject").click();
       if (event.code === "KeyV") setTool("select");
       if (event.code === "KeyH") setTool("pan");
@@ -5006,7 +5018,8 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     else if ($("#assetStudio").classList.contains("active") && event.code === "Escape") closeAssetStudio();
     else if ($("#characterAnimator").classList.contains("active") && event.code === "Escape") closeCharacterAnimator();
   });
-  window.addEventListener("keyup", event => { keys[event.code] = false; });
+  window.addEventListener("keyup", event => { if (!isTypingTarget(event.target)) keys[event.code] = false; });
+
   function setTool(tool) {
     activeTool = tool; $$(".tool").forEach(b => b.classList.toggle("active", b.dataset.tool === tool));
   }
