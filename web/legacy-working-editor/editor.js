@@ -92,6 +92,9 @@
   let assetStudioCategory = "all";
   let assetSelection = null;
   let assetSelectionDrag = null;
+  let assetLassoMode = false;
+  let assetLassoPoints = [];
+  let assetLassoHover = null;
   let assetZoom = .5;
   let pickBackgroundActive = false;
   let assetPaintTool = "select";
@@ -1106,6 +1109,37 @@
     return canvas;
   }
 
+  function polygonBounds(points) {
+    if (!points?.length) return null;
+    const xs = points.map(p => p.x);
+    const ys = points.map(p => p.y);
+    const minX = Math.floor(Math.min(...xs));
+    const minY = Math.floor(Math.min(...ys));
+    const maxX = Math.ceil(Math.max(...xs));
+    const maxY = Math.ceil(Math.max(...ys));
+    return { x: minX, y: minY, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY) };
+  }
+
+  function drawPolygonPath(ctx, points, offsetX = 0, offsetY = 0) {
+    if (!points?.length) return;
+    ctx.beginPath();
+    ctx.moveTo(points[0].x - offsetX, points[0].y - offsetY);
+    points.slice(1).forEach(point => ctx.lineTo(point.x - offsetX, point.y - offsetY));
+  }
+
+  function closeLassoSelection() {
+    if (assetLassoPoints.length < 3) return;
+    const image = images.get(selectedAssetId);
+    const bounds = clampAssetSelection(polygonBounds(assetLassoPoints), image);
+    if (!bounds) return;
+    assetSelection = { ...bounds, polygon: assetLassoPoints.map(point => ({ x: point.x, y: point.y })) };
+    assetLassoPoints = [];
+    assetLassoHover = null;
+    assetLassoMode = false;
+    if ($("#lassoSelectSprite")) $("#lassoSelectSprite").classList.remove("active");
+    drawAssetPreview();
+    updateSelectionDetails(`Lasso selection: ${assetSelection.w} x ${assetSelection.h}px around ${assetSelection.polygon.length} points.`);
+  }
   function drawAssetPreview() {
     const asset = project.assets.find(a => a.id === selectedAssetId);
     const image = images.get(selectedAssetId);
@@ -1136,8 +1170,33 @@
       assetCtx.strokeStyle = "#ffd878";
       assetCtx.lineWidth = Math.max(2, 3 / assetZoom);
       assetCtx.setLineDash([Math.max(4, 8 / assetZoom), Math.max(3, 5 / assetZoom)]);
-      assetCtx.fillRect(assetSelection.x, assetSelection.y, assetSelection.w, assetSelection.h);
-      assetCtx.strokeRect(assetSelection.x, assetSelection.y, assetSelection.w, assetSelection.h);
+      if (assetSelection.polygon?.length) {
+        drawPolygonPath(assetCtx, assetSelection.polygon);
+        assetCtx.closePath();
+        assetCtx.fill();
+        assetCtx.stroke();
+      } else {
+        assetCtx.fillRect(assetSelection.x, assetSelection.y, assetSelection.w, assetSelection.h);
+        assetCtx.strokeRect(assetSelection.x, assetSelection.y, assetSelection.w, assetSelection.h);
+      }
+      assetCtx.restore();
+    }
+    if (assetLassoMode && assetLassoPoints.length) {
+      assetCtx.save();
+      assetCtx.strokeStyle = "#7ee8ff";
+      assetCtx.fillStyle = "#7ee8ff";
+      assetCtx.lineWidth = Math.max(2, 2 / assetZoom);
+      assetCtx.setLineDash([Math.max(4, 7 / assetZoom), Math.max(3, 5 / assetZoom)]);
+      drawPolygonPath(assetCtx, assetLassoPoints);
+      if (assetLassoHover) assetCtx.lineTo(assetLassoHover.x, assetLassoHover.y);
+      assetCtx.stroke();
+      assetCtx.setLineDash([]);
+      assetLassoPoints.forEach((point, index) => {
+        assetCtx.beginPath();
+        assetCtx.arc(point.x, point.y, Math.max(3, 4 / assetZoom), 0, Math.PI * 2);
+        assetCtx.fillStyle = index === 0 ? "#ffd878" : "#7ee8ff";
+        assetCtx.fill();
+      });
       assetCtx.restore();
     }
   }
@@ -1168,6 +1227,7 @@
     if ($("#resetFloatingLayerScale")) $("#resetFloatingLayerScale").disabled = !hasFloatingLayer;
     if ($("#pasteFlipX")) $("#pasteFlipX").disabled = !copiedAssetSprite;
     if ($("#pasteFlipY")) $("#pasteFlipY").disabled = !copiedAssetSprite;
+    if ($("#lassoSelectSprite")) $("#lassoSelectSprite").classList.toggle("active", assetLassoMode);
     $("#keepSelectionPixels").disabled = !assetSelection;
     $("#eraseSelectionPixels").disabled = !assetSelection;
     ["selectionX", "selectionY", "selectionW", "selectionH"].forEach(id => { $(`#${id}`).disabled = !assetSelection; });
@@ -1180,7 +1240,7 @@
       ["selectionX", "selectionY", "selectionW", "selectionH"].forEach(id => { $(`#${id}`).value = ""; });
     }
     $("#selectionDetails").textContent = message || assetStatusMessage || (assetSelection
-      ? `Selected sprite: ${assetSelection.w} x ${assetSelection.h}px at ${assetSelection.x}, ${assetSelection.y}`
+      ? `${assetSelection.polygon?.length ? "Lasso" : "Selected sprite"}: ${assetSelection.w} x ${assetSelection.h}px at ${assetSelection.x}, ${assetSelection.y}`
       : "No sprite selected yet.");
   }
 
@@ -1935,6 +1995,9 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   function resetAssetWorkspace() {
     assetSelection = null;
     assetSelectionDrag = null;
+    assetLassoMode = false;
+    assetLassoPoints = [];
+    assetLassoHover = null;
     assetPreviewCache = null;
     assetStatusMessage = "";
     pickBackgroundActive = false;
@@ -2047,6 +2110,9 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   }
   function setAssetSelection(selection, message = "") {
     assetSelection = clampAssetSelection(selection);
+    assetLassoPoints = [];
+    assetLassoHover = null;
+    assetLassoMode = false;
     assetSelectionDrag = null;
     assetStatusMessage = "";
     drawAssetPreview();
@@ -2077,6 +2143,20 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     }
     assetPreview.setPointerCapture(event.pointerId);
     assetStatusMessage = "";
+    if (assetLassoMode) {
+      const first = assetLassoPoints[0];
+      const closeDistance = first ? Math.hypot(point.x - first.x, point.y - first.y) : Infinity;
+      if (assetLassoPoints.length >= 3 && closeDistance <= Math.max(8, 10 / assetZoom)) {
+        closeLassoSelection();
+        return;
+      }
+      assetSelection = null;
+      assetLassoPoints.push(point);
+      assetLassoHover = point;
+      drawAssetPreview();
+      updateSelectionDetails(assetLassoPoints.length === 1 ? "Lasso started. Click around the shape, then click the first point to close it." : `Lasso point ${assetLassoPoints.length}. Click the first point to close.`);
+      return;
+    }
     if (assetPaintTool !== "select") {
       const asset = project.assets.find(a => a.id === selectedAssetId);
       if (!asset) return;
@@ -2128,6 +2208,11 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       assetSelection = { x: floatingPasteLayer.x, y: floatingPasteLayer.y, w: layerDrawWidth(floatingPasteLayer), h: layerDrawHeight(floatingPasteLayer) };
       drawAssetPreview();
       updateSelectionDetails(`Floating layer: ${layerDrawWidth(floatingPasteLayer)} x ${layerDrawHeight(floatingPasteLayer)}px at ${floatingPasteLayer.x}, ${floatingPasteLayer.y}.`);
+      return;
+    }
+    if (assetLassoMode) {
+      assetLassoHover = point;
+      drawAssetPreview();
       return;
     }
     if (!assetSelectionDrag) {
@@ -2263,6 +2348,9 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   };
   $("#clearAssetSelection").onclick = () => {
     assetSelection = null;
+    assetLassoMode = false;
+    assetLassoPoints = [];
+    assetLassoHover = null;
     assetStatusMessage = "";
     drawAssetPreview();
     updateSelectionDetails();
@@ -2279,6 +2367,15 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     });
   });
   if ($("#selectVisibleSprite")) $("#selectVisibleSprite").onclick = selectVisibleSpriteBounds;
+  if ($("#lassoSelectSprite")) $("#lassoSelectSprite").onclick = () => {
+    assetLassoMode = !assetLassoMode;
+    assetSelectionDrag = null;
+    assetLassoHover = null;
+    if (!assetLassoMode) assetLassoPoints = [];
+    setAssetPaintTool("select");
+    drawAssetPreview();
+    updateSelectionDetails(assetLassoMode ? "Lasso mode: click points around the shape, then click the first point to close." : "Lasso mode off.");
+  };
   $("#extractAsset").onclick = extractSelectedAsset;
   if ($("#copySelectedSprite")) $("#copySelectedSprite").onclick = copySelectedSprite;
   if ($("#pasteCopiedSprite")) $("#pasteCopiedSprite").onclick = pasteCopiedSprite;
@@ -2312,6 +2409,14 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     crop.height = assetSelection.h;
     const cropCtx = crop.getContext("2d", { willReadFrequently: true });
     cropCtx.drawImage(image, assetSelection.x, assetSelection.y, assetSelection.w, assetSelection.h, 0, 0, assetSelection.w, assetSelection.h);
+    if (assetSelection.polygon?.length) {
+      cropCtx.save();
+      cropCtx.globalCompositeOperation = "destination-in";
+      drawPolygonPath(cropCtx, assetSelection.polygon, assetSelection.x, assetSelection.y);
+      cropCtx.closePath();
+      cropCtx.fill();
+      cropCtx.restore();
+    }
     if (transparencyPreview) {
       const data = cropCtx.getImageData(0, 0, crop.width, crop.height);
       cropCtx.putImageData(applyTransparency(data), 0, 0);
@@ -2472,16 +2577,33 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   function applySelectionPixelDelete(mode) {
     const asset = project.assets.find(a => a.id === selectedAssetId);
     const image = images.get(selectedAssetId);
-    const selection = clampAssetSelection(assetSelection, image);
+    const rawSelection = assetSelection;
+    const clampedSelection = clampAssetSelection(rawSelection, image);
+    const selection = clampedSelection && rawSelection?.polygon?.length ? { ...clampedSelection, polygon: rawSelection.polygon.map(point => ({ x: point.x, y: point.y })) } : clampedSelection;
     if (!asset || !image?.naturalWidth || !selection) return;
-    const action = mode === "outside" ? "erase every pixel outside the selected rectangle" : "erase the pixels inside the selected rectangle";
+    const selectionKind = selection.polygon?.length ? "lasso selection" : "selected rectangle";
+    const action = mode === "outside" ? `erase every pixel outside the ${selectionKind}` : `erase the pixels inside the ${selectionKind}`;
     if (!confirm(`This will ${action} in "${asset.name}" and save real transparency into the project asset.\n\nYour original file on disk will not be changed. Continue?`)) return;
     const canvas = document.createElement("canvas");
     canvas.width = image.naturalWidth;
     canvas.height = image.naturalHeight;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     ctx.drawImage(image, 0, 0);
-    if (mode === "outside") {
+    if (selection.polygon?.length) {
+      ctx.save();
+      if (mode === "outside") {
+        ctx.globalCompositeOperation = "destination-in";
+        drawPolygonPath(ctx, selection.polygon);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.globalCompositeOperation = "destination-out";
+        drawPolygonPath(ctx, selection.polygon);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    } else if (mode === "outside") {
       ctx.save();
       ctx.globalCompositeOperation = "destination-out";
       ctx.fillRect(0, 0, canvas.width, selection.y);
@@ -5001,6 +5123,15 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
 
   window.addEventListener("keydown", event => {
     if (isTypingTarget(event.target)) return;
+    if (!playing && assetLassoMode && event.code === "Escape") {
+      assetLassoMode = false;
+      assetLassoPoints = [];
+      assetLassoHover = null;
+      drawAssetPreview();
+      updateSelectionDetails("Lasso cancelled.");
+      event.preventDefault();
+      return;
+    }
     keys[event.code] = true;
     if (!playing && (event.ctrlKey || event.metaKey) && event.code === "KeyZ" && $("#characterAnimator").classList.contains("active")) {
       event.preventDefault();
