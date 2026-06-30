@@ -374,6 +374,11 @@
             <button id="mergeFloatingPaste" disabled>Merge layer</button>
             <button id="cancelFloatingPaste" disabled>Cancel layer</button>
             <button id="undoAssetEdit" disabled>Undo last asset edit</button>
+            <div class="floating-layer-scale">
+              <label>Layer scale <span id="floatingLayerScaleValue">100%</span><input id="floatingLayerScale" type="range" min="10" max="400" value="100" disabled></label>
+              <input id="floatingLayerScaleExact" type="number" min="10" max="400" step="1" value="100" disabled>
+              <button id="resetFloatingLayerScale" disabled>Reset scale</button>
+            </div>
             <label class="check"><input id="pasteFlipX" type="checkbox" disabled> Flip H</label>
             <label class="check"><input id="pasteFlipY" type="checkbox" disabled> Flip V</label>
             <button id="downloadSelectedSprite" disabled>Download selected PNG</button>

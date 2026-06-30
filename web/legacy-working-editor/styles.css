@@ -435,7 +435,8 @@ button.danger { color: #ffc2b9; border-color: #6b3932; }
 }
 #assetPreview.painting { cursor: none; }
 #assetPreview.picking-color { cursor: crosshair; }
-#assetPreview.moving-layer { cursor: move; }
+#assetPreview.moving-layer { cursor: grab; }
+#assetPreview.moving-layer:active { cursor: grabbing; }
 /* Exact numeric boxes beside sliders, so values can be typed or stepped with arrows. */
 .range-with-exact {
   display: grid;
@@ -516,3 +517,6 @@ button.danger { color: #ffc2b9; border-color: #6b3932; }
 .character-guide-row input {
   min-width: 0;
 }
+.floating-layer-scale { display: grid; grid-template-columns: minmax(180px, 1fr) 76px auto; gap: 6px; align-items: end; width: 100%; }
+.floating-layer-scale label { min-width: 0; }
+.floating-layer-scale input[type="range"] { width: 100%; }
