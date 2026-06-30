@@ -330,13 +330,6 @@
           <span>Choose an asset on the left, or import a new image.</span>
         </div>
         <div id="assetEditor" hidden>
-          <div class="extract-toolbar">
-            <label>Zoom <span id="assetZoomValue">50%</span>
-              <input id="assetZoom" type="range" min="10" max="1600" value="50" step="10">
-            </label>
-            <button id="fitAsset">Fit sheet</button>
-            <button id="clearAssetSelection">Clear selection</button>
-          </div>
           <div class="transparency-tools">
             <label class="check"><input id="transparentBackground" type="checkbox" checked> Preview background removal</label>
             <button id="pickBackground">Pick background color</button>
@@ -422,6 +415,13 @@
           </div>
           <div class="asset-preview-scroll">
             <div class="asset-preview-wrap"><canvas id="assetPreview" width="1" height="1"></canvas></div>
+          </div>
+          <div class="extract-toolbar">
+            <label>Zoom <span id="assetZoomValue">50%</span>
+              <input id="assetZoom" type="range" min="10" max="1600" value="50" step="10">
+            </label>
+            <button id="fitAsset">Fit sheet</button>
+            <button id="clearAssetSelection">Clear selection</button>
           </div>
           <div class="asset-editor-fields">
             <label>Asset name<input id="assetName" type="text"></label>
@@ -777,22 +777,3 @@
   <script src="editor.js"></script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
