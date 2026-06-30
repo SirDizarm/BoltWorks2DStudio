@@ -100,6 +100,7 @@
   let assetPaintTool = "select";
   let assetPaintStroke = null;
   let assetPaintHover = null;
+  let assetPaintLineStart = null;
   let paintColorPickActive = false;
   let paintColorPickReturnTool = "pen";
   let assetPaintUndoSrc = null;
@@ -1998,6 +1999,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     assetLassoMode = false;
     assetLassoPoints = [];
     assetLassoHover = null;
+    assetPaintLineStart = null;
     assetPreviewCache = null;
     assetStatusMessage = "";
     pickBackgroundActive = false;
@@ -2165,13 +2167,28 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       const canvas = assetPaintPending?.assetId === asset.id ? cloneCanvas(assetPaintPending.canvas) : assetSourceCanvas(asset, image);
       const ctx = canvas.getContext("2d");
       const settings = paintSettings();
+      const lineStart = assetPaintLineStart?.assetId === asset.id ? assetPaintLineStart.point : null;
+      if (event.shiftKey && lineStart) {
+        paintSegment(ctx, lineStart, point, settings);
+        assetPaintLineStart = { assetId: asset.id, point };
+        assetPaintPending = { assetId: asset.id, canvas };
+        assetPreviewCache = null;
+        assetCtx.imageSmoothingEnabled = false;
+        assetCtx.clearRect(0, 0, assetPreview.width, assetPreview.height);
+        assetCtx.drawImage(canvas, 0, 0);
+        drawPaintCursorPreview(point);
+        updatePaintControls();
+        updateSelectionDetails(`Paint line drawn from ${lineStart.x}, ${lineStart.y} to ${point.x}, ${point.y}. Save paint changes to bake it into the asset.`);
+        return;
+      }
       paintDot(ctx, point, settings);
+      assetPaintLineStart = { assetId: asset.id, point };
       assetPaintStroke = { canvas, ctx, last: point, settings, assetId: asset.id };
       assetCtx.imageSmoothingEnabled = false;
       assetCtx.clearRect(0, 0, assetPreview.width, assetPreview.height);
       assetCtx.drawImage(canvas, 0, 0);
       drawPaintCursorPreview(point);
-      updateSelectionDetails("Painting... release to save into this asset.");
+      updateSelectionDetails("Painting... release to keep these pending paint changes.");
       return;
     }
     if (assetMoveLayerMode && floatingPasteLayer?.assetId === selectedAssetId) {
@@ -2233,12 +2250,14 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     if (assetPaintStroke) {
       const canvas = assetPaintStroke.canvas;
       const assetId = assetPaintStroke.assetId;
+      const lastPoint = assetPaintStroke.last;
       assetPaintStroke = null;
+      assetPaintLineStart = { assetId, point: lastPoint };
       assetPaintPending = { assetId, canvas };
       assetPreviewCache = null;
       drawAssetPreview();
       updatePaintControls();
-      updateSelectionDetails("Paint changes pending. Use Save paint changes to bake them into the asset.");
+      updateSelectionDetails("Paint changes pending. Shift-click another point to draw a straight line, or use Save paint changes to bake it into the asset.");
       return;
     }
     assetSelectionDrag = null;
@@ -2284,6 +2303,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   if ($("#paintUndo")) $("#paintUndo").onclick = () => {
     if (assetPaintPending?.assetId !== selectedAssetId) return;
     assetPaintPending = null;
+    assetPaintLineStart = null;
     assetPreviewCache = null;
     drawAssetPreview();
     updatePaintControls();
@@ -5762,99 +5782,4 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     }
   }).catch(() => {});
 })();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
