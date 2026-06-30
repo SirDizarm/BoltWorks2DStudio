@@ -353,12 +353,15 @@
               <label>Layer scale <span id="floatingLayerScaleValue">100%</span><input id="floatingLayerScale" type="range" min="10" max="400" value="100" disabled></label>
               <input id="floatingLayerScaleExact" type="number" min="10" max="400" step="1" value="100" disabled>
               <button id="resetFloatingLayerScale" disabled>Reset scale</button>
+              <label>Layer rotation <span id="floatingLayerRotationValue">0 deg</span><input id="floatingLayerRotation" type="range" min="-180" max="180" value="0" disabled></label>
+              <input id="floatingLayerRotationExact" type="number" min="-180" max="180" step="1" value="0" disabled>
+              <button id="resetFloatingLayerRotation" disabled>Reset rotation</button>
               <label class="check"><input id="pasteFlipX" type="checkbox" disabled> Flip H</label>
               <label class="check"><input id="pasteFlipY" type="checkbox" disabled> Flip V</label>
             </div>
             <div class="warp-layer-tools">
               <strong>Warp / puppet draft</strong>
-              <span>Copy/paste a part as a floating layer, press Warp layer, then drag the four corner pins. Apply with Merge layer or cancel without changing the asset.</span>
+              <span>Copy/paste a part as a floating layer, press Warp layer, then drag the corner and side pins. Apply with Merge layer or cancel without changing the asset.</span>
               <button id="resetWarpLayer" disabled>Reset warp corners</button>
             </div>
             <button id="downloadSelectedSprite" disabled>Download selected PNG</button>

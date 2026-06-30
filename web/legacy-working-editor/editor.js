@@ -1235,6 +1235,16 @@
     }
     if ($("#floatingLayerScaleValue")) $("#floatingLayerScaleValue").textContent = hasFloatingLayer ? `${Math.round((floatingPasteLayer.scale || 1) * 100)}%` : "100%";
     if ($("#resetFloatingLayerScale")) $("#resetFloatingLayerScale").disabled = !hasFloatingLayer;
+    if ($("#floatingLayerRotation")) {
+      $("#floatingLayerRotation").disabled = !hasFloatingLayer;
+      $("#floatingLayerRotation").value = hasFloatingLayer ? Math.round(Number(floatingPasteLayer.rotation) || 0) : 0;
+    }
+    if ($("#floatingLayerRotationExact")) {
+      $("#floatingLayerRotationExact").disabled = !hasFloatingLayer;
+      $("#floatingLayerRotationExact").value = hasFloatingLayer ? Math.round(Number(floatingPasteLayer.rotation) || 0) : 0;
+    }
+    if ($("#floatingLayerRotationValue")) $("#floatingLayerRotationValue").textContent = hasFloatingLayer ? `${Math.round(Number(floatingPasteLayer.rotation) || 0)} deg` : "0 deg";
+    if ($("#resetFloatingLayerRotation")) $("#resetFloatingLayerRotation").disabled = !hasFloatingLayer;
     if ($("#pasteFlipX")) $("#pasteFlipX").disabled = !copiedAssetSprite;
     if ($("#pasteFlipY")) $("#pasteFlipY").disabled = !copiedAssetSprite;
     if ($("#lassoSelectSprite")) $("#lassoSelectSprite").classList.toggle("active", assetLassoMode);
@@ -2089,25 +2099,71 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   }
   function layerDrawWidth(layer) { return Math.max(1, Math.round((layer?.sourceW || layer?.w || 1) * (layer?.scale || 1))); }
   function layerDrawHeight(layer) { return Math.max(1, Math.round((layer?.sourceH || layer?.h || 1) * (layer?.scale || 1))); }
+  function floatingLayerCenter(layer) {
+    return { x: layer.x + layerDrawWidth(layer) / 2, y: layer.y + layerDrawHeight(layer) / 2 };
+  }
+  function rotatePoint(point, center, degrees) {
+    const radians = (Number(degrees) || 0) * Math.PI / 180;
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    const dx = point.x - center.x;
+    const dy = point.y - center.y;
+    return { x: center.x + dx * cos - dy * sin, y: center.y + dx * sin + dy * cos };
+  }
   function defaultWarpCorners(layer) {
     const drawW = layerDrawWidth(layer);
     const drawH = layerDrawHeight(layer);
-    return {
+    const center = floatingLayerCenter(layer);
+    const points = {
       tl: { x: layer.x, y: layer.y },
+      tm: { x: layer.x + drawW / 2, y: layer.y },
       tr: { x: layer.x + drawW, y: layer.y },
+      rm: { x: layer.x + drawW, y: layer.y + drawH / 2 },
       br: { x: layer.x + drawW, y: layer.y + drawH },
-      bl: { x: layer.x, y: layer.y + drawH }
+      bm: { x: layer.x + drawW / 2, y: layer.y + drawH },
+      bl: { x: layer.x, y: layer.y + drawH },
+      lm: { x: layer.x, y: layer.y + drawH / 2 }
     };
+    if (layer.rotation) Object.keys(points).forEach(key => { points[key] = rotatePoint(points[key], center, layer.rotation); });
+    return points;
   }
   function ensureWarpCorners(layer) {
     if (!layer) return null;
     if (!layer.warpCorners) layer.warpCorners = defaultWarpCorners(layer);
+    if (!layer.warpCorners.tm) {
+      const old = layer.warpCorners;
+      layer.warpCorners = {
+        tl: old.tl,
+        tm: { x: (old.tl.x + old.tr.x) / 2, y: (old.tl.y + old.tr.y) / 2 },
+        tr: old.tr,
+        rm: { x: (old.tr.x + old.br.x) / 2, y: (old.tr.y + old.br.y) / 2 },
+        br: old.br,
+        bm: { x: (old.bl.x + old.br.x) / 2, y: (old.bl.y + old.br.y) / 2 },
+        bl: old.bl,
+        lm: { x: (old.tl.x + old.bl.x) / 2, y: (old.tl.y + old.bl.y) / 2 }
+      };
+    }
     return layer.warpCorners;
+  }
+  function quadraticPoint(a, b, c, t) {
+    const inv = 1 - t;
+    return { x: a.x * inv * inv + b.x * 2 * inv * t + c.x * t * t, y: a.y * inv * inv + b.y * 2 * inv * t + c.y * t * t };
   }
   function bilerpCorners(corners, u, v) {
     return {
       x: corners.tl.x * (1 - u) * (1 - v) + corners.tr.x * u * (1 - v) + corners.br.x * u * v + corners.bl.x * (1 - u) * v,
       y: corners.tl.y * (1 - u) * (1 - v) + corners.tr.y * u * (1 - v) + corners.br.y * u * v + corners.bl.y * (1 - u) * v
+    };
+  }
+  function warpPoint(corners, u, v) {
+    const top = quadraticPoint(corners.tl, corners.tm, corners.tr, u);
+    const bottom = quadraticPoint(corners.bl, corners.bm, corners.br, u);
+    const left = quadraticPoint(corners.tl, corners.lm, corners.bl, v);
+    const right = quadraticPoint(corners.tr, corners.rm, corners.br, v);
+    const bilinear = bilerpCorners(corners, u, v);
+    return {
+      x: top.x * (1 - v) + bottom.x * v + left.x * (1 - u) + right.x * u - bilinear.x,
+      y: top.y * (1 - v) + bottom.y * v + left.y * (1 - u) + right.y * u - bilinear.y
     };
   }
   function drawImageTriangle(ctx, image, s0, s1, s2, d0, d1, d2) {
@@ -2135,7 +2191,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     const corners = ensureWarpCorners(layer);
     const srcW = layer.sourceW || layer.image.naturalWidth || layer.image.width || 1;
     const srcH = layer.sourceH || layer.image.naturalHeight || layer.image.height || 1;
-    const steps = 18;
+    const steps = 22;
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     for (let y = 0; y < steps; y++) {
@@ -2146,7 +2202,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
         const sv0 = (layer.flipY ? 1 - v0 : v0) * srcH;
         const sv1 = (layer.flipY ? 1 - v1 : v1) * srcH;
         const s00 = { x: su0, y: sv0 }, s10 = { x: su1, y: sv0 }, s11 = { x: su1, y: sv1 }, s01 = { x: su0, y: sv1 };
-        const d00 = bilerpCorners(corners, u0, v0), d10 = bilerpCorners(corners, u1, v0), d11 = bilerpCorners(corners, u1, v1), d01 = bilerpCorners(corners, u0, v1);
+        const d00 = warpPoint(corners, u0, v0), d10 = warpPoint(corners, u1, v0), d11 = warpPoint(corners, u1, v1), d01 = warpPoint(corners, u0, v1);
         drawImageTriangle(ctx, layer.image, s00, s10, s11, d00, d10, d11);
         drawImageTriangle(ctx, layer.image, s00, s11, s01, d00, d11, d01);
       }
@@ -2161,16 +2217,18 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     }
     const drawW = layerDrawWidth(layer);
     const drawH = layerDrawHeight(layer);
+    const rotation = (Number(layer.rotation) || 0) * Math.PI / 180;
     ctx.save();
-    ctx.translate(layer.x + (layer.flipX ? drawW : 0), layer.y + (layer.flipY ? drawH : 0));
+    ctx.translate(layer.x + drawW / 2, layer.y + drawH / 2);
+    ctx.rotate(rotation);
     ctx.scale(layer.flipX ? -1 : 1, layer.flipY ? -1 : 1);
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(layer.image, 0, 0, drawW, drawH);
+    ctx.drawImage(layer.image, -drawW / 2, -drawH / 2, drawW, drawH);
     ctx.restore();
   }
   function floatingLayerBounds(layer) {
-    const corners = layer?.warpCorners || defaultWarpCorners(layer);
-    const points = [corners.tl, corners.tr, corners.br, corners.bl];
+    const corners = ensureWarpCorners({ ...layer, warpCorners: layer?.warpCorners || defaultWarpCorners(layer) }) || defaultWarpCorners(layer);
+    const points = [corners.tl, corners.tm, corners.tr, corners.rm, corners.br, corners.bm, corners.bl, corners.lm].filter(Boolean);
     const minX = Math.min(...points.map(p => p.x));
     const minY = Math.min(...points.map(p => p.y));
     const maxX = Math.max(...points.map(p => p.x));
@@ -2179,7 +2237,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   }
   function drawWarpPins(ctx, layer) {
     if (!(assetWarpMode && layer?.warpCorners)) return;
-    const corners = layer.warpCorners;
+    const corners = ensureWarpCorners(layer);
     ctx.save();
     ctx.strokeStyle = "#7ee8ff";
     ctx.fillStyle = "rgba(126,232,255,.16)";
@@ -2187,9 +2245,10 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     ctx.setLineDash([Math.max(4, 8 / assetZoom), Math.max(3, 5 / assetZoom)]);
     ctx.beginPath();
     ctx.moveTo(corners.tl.x, corners.tl.y);
-    ctx.lineTo(corners.tr.x, corners.tr.y);
-    ctx.lineTo(corners.br.x, corners.br.y);
-    ctx.lineTo(corners.bl.x, corners.bl.y);
+    ctx.quadraticCurveTo(corners.tm.x, corners.tm.y, corners.tr.x, corners.tr.y);
+    ctx.quadraticCurveTo(corners.rm.x, corners.rm.y, corners.br.x, corners.br.y);
+    ctx.quadraticCurveTo(corners.bm.x, corners.bm.y, corners.bl.x, corners.bl.y);
+    ctx.quadraticCurveTo(corners.lm.x, corners.lm.y, corners.tl.x, corners.tl.y);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
@@ -2197,7 +2256,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     Object.entries(corners).forEach(([name, point]) => {
       ctx.beginPath();
       ctx.arc(point.x, point.y, Math.max(5, 7 / assetZoom), 0, Math.PI * 2);
-      ctx.fillStyle = assetWarpHandle === name ? "#ffd878" : "#7ee8ff";
+      ctx.fillStyle = assetWarpHandle === name ? "#ffd878" : (name.length === 2 && name[1] === "m" ? "#9fffd1" : "#7ee8ff");
       ctx.fill();
       ctx.strokeStyle = "#14231b";
       ctx.stroke();
@@ -2207,8 +2266,9 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   function warpHandleAtPoint(point) {
     const layer = floatingPasteLayer;
     if (!(assetWarpMode && layer?.assetId === selectedAssetId && layer.warpCorners)) return null;
+    const corners = ensureWarpCorners(layer);
     const radius = Math.max(8, 10 / assetZoom);
-    for (const [name, corner] of Object.entries(layer.warpCorners)) {
+    for (const [name, corner] of Object.entries(corners)) {
       if (Math.hypot(point.x - corner.x, point.y - corner.y) <= radius) return name;
     }
     return null;
@@ -2225,6 +2285,8 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     floatingPasteLayer.dragOffsetX = centered ? Math.round(bounds.w / 2) : point.x - bounds.x;
     floatingPasteLayer.dragOffsetY = centered ? Math.round(bounds.h / 2) : point.y - bounds.y;
     floatingPasteLayer.dragStartBounds = bounds;
+    floatingPasteLayer.dragStartX = floatingPasteLayer.x;
+    floatingPasteLayer.dragStartY = floatingPasteLayer.y;
     floatingPasteLayer.dragStartCorners = floatingPasteLayer.warpCorners ? JSON.parse(JSON.stringify(floatingPasteLayer.warpCorners)) : null;
     assetSelection = bounds;
     drawAssetPreview();
@@ -2391,13 +2453,13 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       const maxY = Math.max(0, (image?.naturalHeight || 0) - layerDrawHeight(floatingPasteLayer));
       const nextX = clamp(Math.round(point.x - floatingPasteLayer.dragOffsetX), 0, maxX);
       const nextY = clamp(Math.round(point.y - floatingPasteLayer.dragOffsetY), 0, maxY);
-      if (floatingPasteLayer.warpCorners && floatingPasteLayer.dragStartCorners && floatingPasteLayer.dragStartBounds) {
-        const dx = nextX - floatingPasteLayer.dragStartBounds.x;
-        const dy = nextY - floatingPasteLayer.dragStartBounds.y;
-        for (const key of ["tl", "tr", "br", "bl"]) floatingPasteLayer.warpCorners[key] = { x: floatingPasteLayer.dragStartCorners[key].x + dx, y: floatingPasteLayer.dragStartCorners[key].y + dy };
+      const dx = nextX - floatingPasteLayer.dragStartBounds.x;
+      const dy = nextY - floatingPasteLayer.dragStartBounds.y;
+      if (floatingPasteLayer.warpCorners && floatingPasteLayer.dragStartCorners) {
+        for (const key of Object.keys(floatingPasteLayer.dragStartCorners)) floatingPasteLayer.warpCorners[key] = { x: floatingPasteLayer.dragStartCorners[key].x + dx, y: floatingPasteLayer.dragStartCorners[key].y + dy };
       } else {
-        floatingPasteLayer.x = nextX;
-        floatingPasteLayer.y = nextY;
+        floatingPasteLayer.x = (floatingPasteLayer.dragStartX ?? floatingPasteLayer.x) + dx;
+        floatingPasteLayer.y = (floatingPasteLayer.dragStartY ?? floatingPasteLayer.y) + dy;
       }
       assetSelection = floatingLayerBounds(floatingPasteLayer);
       drawAssetPreview();
@@ -2597,9 +2659,22 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     drawAssetPreview();
     updateSelectionDetails(`Floating layer scaled to ${percent}% (${floatingPasteLayer.w} x ${floatingPasteLayer.h}px).`);
   }
+  function setFloatingLayerRotationDegrees(value) {
+    if (!(floatingPasteLayer?.assetId === selectedAssetId)) return;
+    let degrees = Math.round(Number(value) || 0);
+    degrees = ((degrees + 180) % 360 + 360) % 360 - 180;
+    floatingPasteLayer.rotation = degrees;
+    if (floatingPasteLayer.warpCorners) floatingPasteLayer.warpCorners = defaultWarpCorners(floatingPasteLayer);
+    assetSelection = floatingLayerBounds(floatingPasteLayer);
+    drawAssetPreview();
+    updateSelectionDetails(`Floating layer rotated to ${degrees} deg. Merge layer to apply or Cancel layer to throw it away.`);
+  }
   if ($("#floatingLayerScale")) $("#floatingLayerScale").oninput = event => setFloatingLayerScalePercent(event.target.value);
   if ($("#floatingLayerScaleExact")) $("#floatingLayerScaleExact").onchange = event => setFloatingLayerScalePercent(event.target.value);
   if ($("#resetFloatingLayerScale")) $("#resetFloatingLayerScale").onclick = () => setFloatingLayerScalePercent(100);
+  if ($("#floatingLayerRotation")) $("#floatingLayerRotation").oninput = event => setFloatingLayerRotationDegrees(event.target.value);
+  if ($("#floatingLayerRotationExact")) $("#floatingLayerRotationExact").onchange = event => setFloatingLayerRotationDegrees(event.target.value);
+  if ($("#resetFloatingLayerRotation")) $("#resetFloatingLayerRotation").onclick = () => setFloatingLayerRotationDegrees(0);
   if ($("#pasteFlipX")) $("#pasteFlipX").onchange = event => { pasteCopiedFlipX = event.target.checked; };
   if ($("#pasteFlipY")) $("#pasteFlipY").onchange = event => { pasteCopiedFlipY = event.target.checked; };
   $("#downloadSelectedSprite").onclick = downloadSelectedSprite;
@@ -2676,7 +2751,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     pasteImage.onload = () => {
       const x = assetSelection ? assetSelection.x : Math.round((image.naturalWidth - pasteImage.naturalWidth) / 2);
       const y = assetSelection ? assetSelection.y : Math.round((image.naturalHeight - pasteImage.naturalHeight) / 2);
-      floatingPasteLayer = { assetId: asset.id, src: copiedAssetSprite.src, image: pasteImage, x: clamp(x, 0, Math.max(0, image.naturalWidth - pasteImage.naturalWidth)), y: clamp(y, 0, Math.max(0, image.naturalHeight - pasteImage.naturalHeight)), sourceW: pasteImage.naturalWidth, sourceH: pasteImage.naturalHeight, w: pasteImage.naturalWidth, h: pasteImage.naturalHeight, scale: 1, sourceAssetId: copiedAssetSprite.sourceAssetId, sourceName: copiedAssetSprite.sourceName, flipX: pasteCopiedFlipX, flipY: pasteCopiedFlipY, dragging: false };
+      floatingPasteLayer = { assetId: asset.id, src: copiedAssetSprite.src, image: pasteImage, x: clamp(x, 0, Math.max(0, image.naturalWidth - pasteImage.naturalWidth)), y: clamp(y, 0, Math.max(0, image.naturalHeight - pasteImage.naturalHeight)), sourceW: pasteImage.naturalWidth, sourceH: pasteImage.naturalHeight, w: pasteImage.naturalWidth, h: pasteImage.naturalHeight, scale: 1, sourceAssetId: copiedAssetSprite.sourceAssetId, sourceName: copiedAssetSprite.sourceName, flipX: pasteCopiedFlipX, flipY: pasteCopiedFlipY, rotation: 0, dragging: false };
       assetWarpMode = false;
       assetWarpHandle = null;
       assetMoveLayerMode = true;
@@ -2714,7 +2789,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     const src = canvas.toDataURL("image/png");
     asset.src = src;
     asset.name = `${asset.name.replace(/\.[^.]+$/, "")}.png`;
-    asset.backgroundRemoved = { ...(asset.backgroundRemoved || {}), pastedSprite: { sourceAssetId: layer.sourceAssetId, sourceName: layer.sourceName, x: mergedBounds.x, y: mergedBounds.y, width: mergedBounds.w, height: mergedBounds.h, scale: layer.scale || 1, flipX: layer.flipX, flipY: layer.flipY, warped: !!layer.warpCorners, appliedAt: Date.now() } };
+    asset.backgroundRemoved = { ...(asset.backgroundRemoved || {}), pastedSprite: { sourceAssetId: layer.sourceAssetId, sourceName: layer.sourceName, x: mergedBounds.x, y: mergedBounds.y, width: mergedBounds.w, height: mergedBounds.h, scale: layer.scale || 1, rotation: Number(layer.rotation) || 0, flipX: layer.flipX, flipY: layer.flipY, warped: !!layer.warpCorners, appliedAt: Date.now() } };
     floatingPasteLayer = null;
     assetMoveLayerMode = false;
     assetWarpMode = false;

@@ -531,7 +531,7 @@ button.danger { color: #ffc2b9; border-color: #6b3932; }
 .character-guide-row input {
   min-width: 0;
 }
-.floating-layer-scale { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(220px, 1fr) 76px auto auto auto; gap: 8px; align-items: end; width: 100%; }
+.floating-layer-scale { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(220px, 1fr) 76px auto; gap: 8px; align-items: end; width: 100%; }
 .floating-layer-scale label { min-width: 0; margin: 0; }
 .floating-layer-scale .check { align-self: center; white-space: nowrap; }
 .floating-layer-scale input[type="range"] { width: 100%; }
