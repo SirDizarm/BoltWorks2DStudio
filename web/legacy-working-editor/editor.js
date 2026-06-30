@@ -100,6 +100,7 @@
   let paintColorPickActive = false;
   let paintColorPickReturnTool = "pen";
   let assetPaintUndoSrc = null;
+  let assetPaintPending = null;
   let transparencyPreview = true;
   let backgroundRgb = { r: 154, g: 158, b: 145 };
   let colorTolerance = 28;
@@ -1115,7 +1116,8 @@
     assetPreview.style.height = `${Math.round(image.naturalHeight * assetZoom)}px`;
     assetCtx.imageSmoothingEnabled = false;
     assetCtx.clearRect(0, 0, assetPreview.width, assetPreview.height);
-    assetCtx.drawImage(processedAssetCanvas(asset, image), 0, 0);
+    const pendingPaintCanvas = assetPaintPending?.assetId === selectedAssetId ? assetPaintPending.canvas : null;
+    assetCtx.drawImage(pendingPaintCanvas || processedAssetCanvas(asset, image), 0, 0);
     if (floatingPasteLayer?.assetId === selectedAssetId && floatingPasteLayer.image?.complete) {
       drawFloatingPasteLayer(assetCtx, floatingPasteLayer);
       assetCtx.save();
@@ -1812,7 +1814,10 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   function updatePaintControls() {
     if ($("#paintSizeValue")) $("#paintSizeValue").textContent = `${$("#paintSize")?.value || 8}px`;
     if ($("#paintOpacityValue")) $("#paintOpacityValue").textContent = `${$("#paintOpacity")?.value || 100}%`;
-    if ($("#paintUndo")) $("#paintUndo").disabled = !assetPaintUndoSrc;
+    const hasPendingPaint = assetPaintPending?.assetId === selectedAssetId;
+    if ($("#paintUndo")) $("#paintUndo").disabled = !hasPendingPaint;
+    if ($("#paintSave")) $("#paintSave").disabled = !hasPendingPaint;
+    if ($("#paintDiscard")) $("#paintDiscard").disabled = !hasPendingPaint;
   }
 
   function assetSourceCanvas(asset, image) {
@@ -1821,6 +1826,15 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     canvas.height = image.naturalHeight;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(image, 0, 0);
+    return canvas;
+  }
+
+  function cloneCanvas(source) {
+    const canvas = document.createElement("canvas");
+    canvas.width = source.width;
+    canvas.height = source.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(source, 0, 0);
     return canvas;
   }
 
@@ -1893,7 +1907,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     ctx.restore();
   }
 
-  function commitPaintCanvas(asset, canvas, message = "Paint saved into asset.") {
+  function commitPaintCanvas(asset, canvas, message = "Paint changes saved into asset.") {
     const src = canvas.toDataURL("image/png");
     pushAssetUndo(asset, "paint edit");
     asset.src = src;
@@ -1901,8 +1915,11 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     const replacement = new Image();
     replacement.onload = () => {
       images.set(asset.id, replacement);
+      if (assetPaintPending?.assetId === asset.id) assetPaintPending = null;
+      assetPaintUndoSrc = null;
       drawAssetPreview();
       renderAssets();
+      updatePaintControls();
       updateSelectionDetails(message);
     };
     replacement.src = src;
@@ -2057,9 +2074,9 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     if (assetPaintTool !== "select") {
       const asset = project.assets.find(a => a.id === selectedAssetId);
       if (!asset) return;
-      assetPaintUndoSrc = asset.src;
+      if (!assetPaintUndoSrc) assetPaintUndoSrc = asset.src;
       updatePaintControls();
-      const canvas = assetSourceCanvas(asset, image);
+      const canvas = assetPaintPending?.assetId === asset.id ? cloneCanvas(assetPaintPending.canvas) : assetSourceCanvas(asset, image);
       const ctx = canvas.getContext("2d");
       const settings = paintSettings();
       paintDot(ctx, point, settings);
@@ -2123,10 +2140,14 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   assetPreview.addEventListener("pointerup", () => {
     if (floatingPasteLayer?.dragging) floatingPasteLayer.dragging = false;
     if (assetPaintStroke) {
-      const asset = project.assets.find(a => a.id === assetPaintStroke.assetId);
       const canvas = assetPaintStroke.canvas;
+      const assetId = assetPaintStroke.assetId;
       assetPaintStroke = null;
-      if (asset) commitPaintCanvas(asset, canvas);
+      assetPaintPending = { assetId, canvas };
+      assetPreviewCache = null;
+      drawAssetPreview();
+      updatePaintControls();
+      updateSelectionDetails("Paint changes pending. Use Save paint changes to bake them into the asset.");
       return;
     }
     assetSelectionDrag = null;
@@ -2169,22 +2190,26 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     $("#paintColor").onchange = event => { drawAssetPreview(); event.target.blur(); };
   }
   if ($("#paintUndo")) $("#paintUndo").onclick = () => {
-    const asset = project.assets.find(a => a.id === selectedAssetId);
-    if (!asset || !assetPaintUndoSrc) return;
-    asset.src = assetPaintUndoSrc;
-    const replacement = new Image();
-    replacement.onload = () => {
-      images.set(asset.id, replacement);
-      assetPreviewCache = null;
-      drawAssetPreview();
-      renderAssets();
-      updateSelectionDetails("Last paint stroke undone.");
-    };
-    replacement.src = assetPaintUndoSrc;
-    images.set(asset.id, replacement);
-    assetPaintUndoSrc = null;
+    if (assetPaintPending?.assetId !== selectedAssetId) return;
+    assetPaintPending = null;
+    assetPreviewCache = null;
+    drawAssetPreview();
     updatePaintControls();
-    markDirty();
+    updateSelectionDetails("Pending paint changes undone.");
+  };
+  if ($("#paintSave")) $("#paintSave").onclick = () => {
+    const asset = project.assets.find(a => a.id === selectedAssetId);
+    if (!asset || assetPaintPending?.assetId !== selectedAssetId) return;
+    commitPaintCanvas(asset, assetPaintPending.canvas);
+  };
+  if ($("#paintDiscard")) $("#paintDiscard").onclick = () => {
+    if (assetPaintPending?.assetId !== selectedAssetId) return;
+    assetPaintPending = null;
+    assetPaintUndoSrc = null;
+    assetPreviewCache = null;
+    drawAssetPreview();
+    updatePaintControls();
+    updateSelectionDetails("Pending paint changes discarded.");
   };
   setAssetPaintTool("select");
   updatePaintControls();
