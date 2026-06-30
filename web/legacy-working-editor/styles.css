@@ -235,6 +235,8 @@ button.danger { color: #ffc2b9; border-color: #6b3932; }
   .studio-asset-card img { height: 80px; }
   .studio-header span { display: none; }
   .sprite-selection-actions, .pixel-edit-actions { grid-template-columns: 1fr; }
+  .floating-layer-scale { grid-template-columns: 1fr 76px auto; }
+  .floating-layer-scale .check { grid-column: auto; }
   .asset-editor-actions { flex-direction: column; }
 }
 @media (pointer: coarse), (max-width: 700px) {
@@ -517,6 +519,7 @@ button.danger { color: #ffc2b9; border-color: #6b3932; }
 .character-guide-row input {
   min-width: 0;
 }
-.floating-layer-scale { display: grid; grid-template-columns: minmax(180px, 1fr) 76px auto; gap: 6px; align-items: end; width: 100%; }
-.floating-layer-scale label { min-width: 0; }
+.floating-layer-scale { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(220px, 1fr) 76px auto auto auto; gap: 8px; align-items: end; width: 100%; }
+.floating-layer-scale label { min-width: 0; margin: 0; }
+.floating-layer-scale .check { align-self: center; white-space: nowrap; }
 .floating-layer-scale input[type="range"] { width: 100%; }
