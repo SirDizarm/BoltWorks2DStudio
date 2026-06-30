@@ -2067,6 +2067,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       assetCtx.imageSmoothingEnabled = false;
       assetCtx.clearRect(0, 0, assetPreview.width, assetPreview.height);
       assetCtx.drawImage(canvas, 0, 0);
+      drawPaintCursorPreview(point);
       updateSelectionDetails("Painting... release to save into this asset.");
       return;
     }
@@ -2092,6 +2093,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       assetCtx.imageSmoothingEnabled = false;
       assetCtx.clearRect(0, 0, assetPreview.width, assetPreview.height);
       assetCtx.drawImage(assetPaintStroke.canvas, 0, 0);
+      drawPaintCursorPreview(point);
       return;
     }
     if (floatingPasteLayer?.dragging) {
