@@ -439,6 +439,18 @@ button.danger { color: #ffc2b9; border-color: #6b3932; }
 #assetPreview.picking-color { cursor: crosshair; }
 #assetPreview.moving-layer { cursor: grab; }
 #assetPreview.moving-layer:active { cursor: grabbing; }
+#assetPreview.warping-layer { cursor: crosshair; }
+.warp-layer-tools {
+  display: grid;
+  gap: 6px;
+  grid-column: 1 / -1;
+  padding: 8px;
+  border: 1px solid rgba(126, 232, 255, .22);
+  border-radius: 6px;
+  background: rgba(126, 232, 255, .05);
+}
+.warp-layer-tools strong { color: #7ee8ff; }
+.warp-layer-tools span { color: var(--muted); font-size: 12px; line-height: 1.35; }
 /* Exact numeric boxes beside sliders, so values can be typed or stepped with arrows. */
 .range-with-exact {
   display: grid;

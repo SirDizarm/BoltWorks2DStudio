@@ -1,4 +1,4 @@
-﻿(() => {
+(() => {
   "use strict";
 
   const $ = (selector) => document.querySelector(selector);
@@ -114,6 +114,8 @@
   let copiedAssetSprite = null;
   let floatingPasteLayer = null;
   let assetMoveLayerMode = false;
+  let assetWarpMode = false;
+  let assetWarpHandle = null;
   let assetUndoStack = [];
   let pasteCopiedFlipX = false;
   let pasteCopiedFlipY = false;
@@ -1155,14 +1157,16 @@
     assetCtx.drawImage(pendingPaintCanvas || processedAssetCanvas(asset, image), 0, 0);
     if (floatingPasteLayer?.assetId === selectedAssetId && floatingPasteLayer.image?.complete) {
       drawFloatingPasteLayer(assetCtx, floatingPasteLayer);
+      const bounds = floatingLayerBounds(floatingPasteLayer);
       assetCtx.save();
       assetCtx.strokeStyle = "#ffef95";
       assetCtx.fillStyle = "rgba(255,216,120,.10)";
       assetCtx.lineWidth = Math.max(2, 3 / assetZoom);
       assetCtx.setLineDash([Math.max(4, 8 / assetZoom), Math.max(3, 5 / assetZoom)]);
-      assetCtx.fillRect(floatingPasteLayer.x, floatingPasteLayer.y, layerDrawWidth(floatingPasteLayer), layerDrawHeight(floatingPasteLayer));
-      assetCtx.strokeRect(floatingPasteLayer.x, floatingPasteLayer.y, layerDrawWidth(floatingPasteLayer), layerDrawHeight(floatingPasteLayer));
+      assetCtx.fillRect(bounds.x, bounds.y, bounds.w, bounds.h);
+      assetCtx.strokeRect(bounds.x, bounds.y, bounds.w, bounds.h);
       assetCtx.restore();
+      drawWarpPins(assetCtx, floatingPasteLayer);
     }
     if (assetPaintTool !== "select" && assetPaintHover) drawPaintCursorPreview(assetPaintHover);
     if (assetSelection) {
@@ -1212,10 +1216,15 @@
       $("#moveFloatingPaste").disabled = !(floatingPasteLayer?.assetId === selectedAssetId);
       $("#moveFloatingPaste").classList.toggle("active", assetMoveLayerMode && floatingPasteLayer?.assetId === selectedAssetId);
     }
-    if ($("#mergeFloatingPaste")) $("#mergeFloatingPaste").disabled = !(floatingPasteLayer?.assetId === selectedAssetId);
-    if ($("#cancelFloatingPaste")) $("#cancelFloatingPaste").disabled = !(floatingPasteLayer?.assetId === selectedAssetId);
-    if ($("#undoAssetEdit")) $("#undoAssetEdit").disabled = !assetUndoStack.length;
     const hasFloatingLayer = floatingPasteLayer?.assetId === selectedAssetId;
+    if ($("#warpFloatingPaste")) {
+      $("#warpFloatingPaste").disabled = !hasFloatingLayer;
+      $("#warpFloatingPaste").classList.toggle("active", assetWarpMode && hasFloatingLayer);
+    }
+    if ($("#resetWarpLayer")) $("#resetWarpLayer").disabled = !hasFloatingLayer;
+    if ($("#mergeFloatingPaste")) $("#mergeFloatingPaste").disabled = !hasFloatingLayer;
+    if ($("#cancelFloatingPaste")) $("#cancelFloatingPaste").disabled = !hasFloatingLayer;
+    if ($("#undoAssetEdit")) $("#undoAssetEdit").disabled = !assetUndoStack.length;
     if ($("#floatingLayerScale")) {
       $("#floatingLayerScale").disabled = !hasFloatingLayer;
       $("#floatingLayerScale").value = hasFloatingLayer ? Math.round((floatingPasteLayer.scale || 1) * 100) : 100;
@@ -2080,8 +2089,76 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   }
   function layerDrawWidth(layer) { return Math.max(1, Math.round((layer?.sourceW || layer?.w || 1) * (layer?.scale || 1))); }
   function layerDrawHeight(layer) { return Math.max(1, Math.round((layer?.sourceH || layer?.h || 1) * (layer?.scale || 1))); }
+  function defaultWarpCorners(layer) {
+    const drawW = layerDrawWidth(layer);
+    const drawH = layerDrawHeight(layer);
+    return {
+      tl: { x: layer.x, y: layer.y },
+      tr: { x: layer.x + drawW, y: layer.y },
+      br: { x: layer.x + drawW, y: layer.y + drawH },
+      bl: { x: layer.x, y: layer.y + drawH }
+    };
+  }
+  function ensureWarpCorners(layer) {
+    if (!layer) return null;
+    if (!layer.warpCorners) layer.warpCorners = defaultWarpCorners(layer);
+    return layer.warpCorners;
+  }
+  function bilerpCorners(corners, u, v) {
+    return {
+      x: corners.tl.x * (1 - u) * (1 - v) + corners.tr.x * u * (1 - v) + corners.br.x * u * v + corners.bl.x * (1 - u) * v,
+      y: corners.tl.y * (1 - u) * (1 - v) + corners.tr.y * u * (1 - v) + corners.br.y * u * v + corners.bl.y * (1 - u) * v
+    };
+  }
+  function drawImageTriangle(ctx, image, s0, s1, s2, d0, d1, d2) {
+    const denom = s0.x * (s1.y - s2.y) + s1.x * (s2.y - s0.y) + s2.x * (s0.y - s1.y);
+    if (Math.abs(denom) < .0001) return;
+    const a = (d0.x * (s1.y - s2.y) + d1.x * (s2.y - s0.y) + d2.x * (s0.y - s1.y)) / denom;
+    const c = (d0.x * (s2.x - s1.x) + d1.x * (s0.x - s2.x) + d2.x * (s1.x - s0.x)) / denom;
+    const e = (d0.x * (s1.x * s2.y - s2.x * s1.y) + d1.x * (s2.x * s0.y - s0.x * s2.y) + d2.x * (s0.x * s1.y - s1.x * s0.y)) / denom;
+    const b = (d0.y * (s1.y - s2.y) + d1.y * (s2.y - s0.y) + d2.y * (s0.y - s1.y)) / denom;
+    const d = (d0.y * (s2.x - s1.x) + d1.y * (s0.x - s2.x) + d2.y * (s1.x - s0.x)) / denom;
+    const f = (d0.y * (s1.x * s2.y - s2.x * s1.y) + d1.y * (s2.x * s0.y - s0.x * s2.y) + d2.y * (s0.x * s1.y - s1.x * s0.y)) / denom;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(d0.x, d0.y);
+    ctx.lineTo(d1.x, d1.y);
+    ctx.lineTo(d2.x, d2.y);
+    ctx.closePath();
+    ctx.clip();
+    ctx.setTransform(a, b, c, d, e, f);
+    ctx.drawImage(image, 0, 0);
+    ctx.restore();
+  }
+  function drawWarpedFloatingLayer(ctx, layer) {
+    if (!layer?.image) return;
+    const corners = ensureWarpCorners(layer);
+    const srcW = layer.sourceW || layer.image.naturalWidth || layer.image.width || 1;
+    const srcH = layer.sourceH || layer.image.naturalHeight || layer.image.height || 1;
+    const steps = 18;
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    for (let y = 0; y < steps; y++) {
+      for (let x = 0; x < steps; x++) {
+        const u0 = x / steps, v0 = y / steps, u1 = (x + 1) / steps, v1 = (y + 1) / steps;
+        const su0 = (layer.flipX ? 1 - u0 : u0) * srcW;
+        const su1 = (layer.flipX ? 1 - u1 : u1) * srcW;
+        const sv0 = (layer.flipY ? 1 - v0 : v0) * srcH;
+        const sv1 = (layer.flipY ? 1 - v1 : v1) * srcH;
+        const s00 = { x: su0, y: sv0 }, s10 = { x: su1, y: sv0 }, s11 = { x: su1, y: sv1 }, s01 = { x: su0, y: sv1 };
+        const d00 = bilerpCorners(corners, u0, v0), d10 = bilerpCorners(corners, u1, v0), d11 = bilerpCorners(corners, u1, v1), d01 = bilerpCorners(corners, u0, v1);
+        drawImageTriangle(ctx, layer.image, s00, s10, s11, d00, d10, d11);
+        drawImageTriangle(ctx, layer.image, s00, s11, s01, d00, d11, d01);
+      }
+    }
+    ctx.restore();
+  }
   function drawFloatingPasteLayer(ctx, layer) {
     if (!layer?.image) return;
+    if (layer.warpCorners) {
+      drawWarpedFloatingLayer(ctx, layer);
+      return;
+    }
     const drawW = layerDrawWidth(layer);
     const drawH = layerDrawHeight(layer);
     ctx.save();
@@ -2091,24 +2168,100 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     ctx.drawImage(layer.image, 0, 0, drawW, drawH);
     ctx.restore();
   }
+  function floatingLayerBounds(layer) {
+    const corners = layer?.warpCorners || defaultWarpCorners(layer);
+    const points = [corners.tl, corners.tr, corners.br, corners.bl];
+    const minX = Math.min(...points.map(p => p.x));
+    const minY = Math.min(...points.map(p => p.y));
+    const maxX = Math.max(...points.map(p => p.x));
+    const maxY = Math.max(...points.map(p => p.y));
+    return { x: Math.round(minX), y: Math.round(minY), w: Math.max(1, Math.round(maxX - minX)), h: Math.max(1, Math.round(maxY - minY)) };
+  }
+  function drawWarpPins(ctx, layer) {
+    if (!(assetWarpMode && layer?.warpCorners)) return;
+    const corners = layer.warpCorners;
+    ctx.save();
+    ctx.strokeStyle = "#7ee8ff";
+    ctx.fillStyle = "rgba(126,232,255,.16)";
+    ctx.lineWidth = Math.max(2, 3 / assetZoom);
+    ctx.setLineDash([Math.max(4, 8 / assetZoom), Math.max(3, 5 / assetZoom)]);
+    ctx.beginPath();
+    ctx.moveTo(corners.tl.x, corners.tl.y);
+    ctx.lineTo(corners.tr.x, corners.tr.y);
+    ctx.lineTo(corners.br.x, corners.br.y);
+    ctx.lineTo(corners.bl.x, corners.bl.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    Object.entries(corners).forEach(([name, point]) => {
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, Math.max(5, 7 / assetZoom), 0, Math.PI * 2);
+      ctx.fillStyle = assetWarpHandle === name ? "#ffd878" : "#7ee8ff";
+      ctx.fill();
+      ctx.strokeStyle = "#14231b";
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+  function warpHandleAtPoint(point) {
+    const layer = floatingPasteLayer;
+    if (!(assetWarpMode && layer?.assetId === selectedAssetId && layer.warpCorners)) return null;
+    const radius = Math.max(8, 10 / assetZoom);
+    for (const [name, corner] of Object.entries(layer.warpCorners)) {
+      if (Math.hypot(point.x - corner.x, point.y - corner.y) <= radius) return name;
+    }
+    return null;
+  }
   function pointInFloatingPaste(point) {
-    return floatingPasteLayer?.assetId === selectedAssetId && point.x >= floatingPasteLayer.x && point.y >= floatingPasteLayer.y && point.x <= floatingPasteLayer.x + layerDrawWidth(floatingPasteLayer) && point.y <= floatingPasteLayer.y + layerDrawHeight(floatingPasteLayer);
+    if (!(floatingPasteLayer?.assetId === selectedAssetId)) return false;
+    const bounds = floatingLayerBounds(floatingPasteLayer);
+    return point.x >= bounds.x && point.y >= bounds.y && point.x <= bounds.x + bounds.w && point.y <= bounds.y + bounds.h;
   }
   function startMovingFloatingLayer(point, centered = false) {
     if (!(floatingPasteLayer?.assetId === selectedAssetId)) return false;
     floatingPasteLayer.dragging = true;
-    floatingPasteLayer.dragOffsetX = centered ? Math.round(layerDrawWidth(floatingPasteLayer) / 2) : point.x - floatingPasteLayer.x;
-    floatingPasteLayer.dragOffsetY = centered ? Math.round(layerDrawHeight(floatingPasteLayer) / 2) : point.y - floatingPasteLayer.y;
-    assetSelection = { x: floatingPasteLayer.x, y: floatingPasteLayer.y, w: layerDrawWidth(floatingPasteLayer), h: layerDrawHeight(floatingPasteLayer) };
+    const bounds = floatingLayerBounds(floatingPasteLayer);
+    floatingPasteLayer.dragOffsetX = centered ? Math.round(bounds.w / 2) : point.x - bounds.x;
+    floatingPasteLayer.dragOffsetY = centered ? Math.round(bounds.h / 2) : point.y - bounds.y;
+    floatingPasteLayer.dragStartBounds = bounds;
+    floatingPasteLayer.dragStartCorners = floatingPasteLayer.warpCorners ? JSON.parse(JSON.stringify(floatingPasteLayer.warpCorners)) : null;
+    assetSelection = bounds;
     drawAssetPreview();
     updateSelectionDetails(`Moving floating layer: ${layerDrawWidth(floatingPasteLayer)} x ${layerDrawHeight(floatingPasteLayer)}px. Drag to place it, then use Merge layer or Cancel layer.`);
     return true;
   }
   function setMoveLayerMode(active) {
     assetMoveLayerMode = !!active && floatingPasteLayer?.assetId === selectedAssetId;
-    if (assetMoveLayerMode) setAssetPaintTool("select");
+    if (assetMoveLayerMode) {
+      assetWarpMode = false;
+      assetWarpHandle = null;
+      setAssetPaintTool("select");
+    }
     if (assetPreview) assetPreview.classList.toggle("moving-layer", assetMoveLayerMode);
     updateSelectionDetails(assetMoveLayerMode ? "Move layer mode: drag in the preview to move the floating pasted layer." : "Move layer mode off. Normal selection is active.");
+  }
+  function setWarpLayerMode(active) {
+    assetWarpMode = !!active && floatingPasteLayer?.assetId === selectedAssetId;
+    assetWarpHandle = null;
+    if (assetWarpMode) {
+      assetMoveLayerMode = false;
+      setAssetPaintTool("select");
+      ensureWarpCorners(floatingPasteLayer);
+    }
+    if (assetPreview) {
+      assetPreview.classList.toggle("moving-layer", assetMoveLayerMode);
+      assetPreview.classList.toggle("warping-layer", assetWarpMode);
+    }
+    drawAssetPreview();
+    updateSelectionDetails(assetWarpMode ? "Warp mode: drag the blue corner pins to stretch the floating layer. Use Merge layer to apply or Cancel layer to throw it away." : "Warp mode off.");
+  }
+  function resetFloatingLayerWarp() {
+    if (!(floatingPasteLayer?.assetId === selectedAssetId)) return;
+    floatingPasteLayer.warpCorners = defaultWarpCorners(floatingPasteLayer);
+    assetWarpMode = true;
+    drawAssetPreview();
+    updateSelectionDetails("Warp corners reset. Drag the blue pins, then Merge layer to apply.");
   }
   function setAssetSelection(selection, message = "") {
     assetSelection = clampAssetSelection(selection);
@@ -2158,6 +2311,15 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       drawAssetPreview();
       updateSelectionDetails(assetLassoPoints.length === 1 ? "Lasso started. Click around the shape, then click the first point to close it." : `Lasso point ${assetLassoPoints.length}. Click the first point to close.`);
       return;
+    }
+    if (assetWarpMode && floatingPasteLayer?.assetId === selectedAssetId) {
+      const handle = warpHandleAtPoint(point);
+      if (handle) {
+        assetWarpHandle = handle;
+        drawAssetPreview();
+        updateSelectionDetails(`Warping ${handle.toUpperCase()} corner. Drag to deform the floating layer.`);
+        return;
+      }
     }
     if (assetPaintTool !== "select") {
       const asset = project.assets.find(a => a.id === selectedAssetId);
@@ -2216,13 +2378,28 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       drawPaintCursorPreview(point);
       return;
     }
+    if (assetWarpHandle && floatingPasteLayer?.warpCorners) {
+      floatingPasteLayer.warpCorners[assetWarpHandle] = point;
+      assetSelection = floatingLayerBounds(floatingPasteLayer);
+      drawAssetPreview();
+      updateSelectionDetails(`Warp ${assetWarpHandle.toUpperCase()} corner: ${point.x}, ${point.y}.`);
+      return;
+    }
     if (floatingPasteLayer?.dragging) {
       const image = images.get(selectedAssetId);
       const maxX = Math.max(0, (image?.naturalWidth || 0) - layerDrawWidth(floatingPasteLayer));
       const maxY = Math.max(0, (image?.naturalHeight || 0) - layerDrawHeight(floatingPasteLayer));
-      floatingPasteLayer.x = clamp(Math.round(point.x - floatingPasteLayer.dragOffsetX), 0, maxX);
-      floatingPasteLayer.y = clamp(Math.round(point.y - floatingPasteLayer.dragOffsetY), 0, maxY);
-      assetSelection = { x: floatingPasteLayer.x, y: floatingPasteLayer.y, w: layerDrawWidth(floatingPasteLayer), h: layerDrawHeight(floatingPasteLayer) };
+      const nextX = clamp(Math.round(point.x - floatingPasteLayer.dragOffsetX), 0, maxX);
+      const nextY = clamp(Math.round(point.y - floatingPasteLayer.dragOffsetY), 0, maxY);
+      if (floatingPasteLayer.warpCorners && floatingPasteLayer.dragStartCorners && floatingPasteLayer.dragStartBounds) {
+        const dx = nextX - floatingPasteLayer.dragStartBounds.x;
+        const dy = nextY - floatingPasteLayer.dragStartBounds.y;
+        for (const key of ["tl", "tr", "br", "bl"]) floatingPasteLayer.warpCorners[key] = { x: floatingPasteLayer.dragStartCorners[key].x + dx, y: floatingPasteLayer.dragStartCorners[key].y + dy };
+      } else {
+        floatingPasteLayer.x = nextX;
+        floatingPasteLayer.y = nextY;
+      }
+      assetSelection = floatingLayerBounds(floatingPasteLayer);
       drawAssetPreview();
       updateSelectionDetails(`Floating layer: ${layerDrawWidth(floatingPasteLayer)} x ${layerDrawHeight(floatingPasteLayer)}px at ${floatingPasteLayer.x}, ${floatingPasteLayer.y}.`);
       return;
@@ -2247,6 +2424,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   });
   assetPreview.addEventListener("pointerup", () => {
     if (floatingPasteLayer?.dragging) floatingPasteLayer.dragging = false;
+    if (assetWarpHandle) assetWarpHandle = null;
     if (assetPaintStroke) {
       const canvas = assetPaintStroke.canvas;
       const assetId = assetPaintStroke.assetId;
@@ -2266,7 +2444,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     updateSelectionDetails();
   });
   assetPreview.addEventListener("pointerleave", () => {
-    if (assetPaintStroke) return;
+    if (assetPaintStroke || assetWarpHandle) return;
     assetPaintHover = null;
     drawAssetPreview();
   });
@@ -2400,6 +2578,8 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   if ($("#copySelectedSprite")) $("#copySelectedSprite").onclick = copySelectedSprite;
   if ($("#pasteCopiedSprite")) $("#pasteCopiedSprite").onclick = pasteCopiedSprite;
   if ($("#moveFloatingPaste")) $("#moveFloatingPaste").onclick = () => setMoveLayerMode(!assetMoveLayerMode);
+  if ($("#warpFloatingPaste")) $("#warpFloatingPaste").onclick = () => setWarpLayerMode(!assetWarpMode);
+  if ($("#resetWarpLayer")) $("#resetWarpLayer").onclick = resetFloatingLayerWarp;
   if ($("#mergeFloatingPaste")) $("#mergeFloatingPaste").onclick = mergeFloatingPasteLayer;
   if ($("#cancelFloatingPaste")) $("#cancelFloatingPaste").onclick = cancelFloatingPasteLayer;
   if ($("#undoAssetEdit")) $("#undoAssetEdit").onclick = restoreLastAssetUndo;
@@ -2412,7 +2592,8 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     floatingPasteLayer.h = layerDrawHeight(floatingPasteLayer);
     floatingPasteLayer.x = clamp(floatingPasteLayer.x, 0, Math.max(0, (image?.naturalWidth || 0) - floatingPasteLayer.w));
     floatingPasteLayer.y = clamp(floatingPasteLayer.y, 0, Math.max(0, (image?.naturalHeight || 0) - floatingPasteLayer.h));
-    assetSelection = { x: floatingPasteLayer.x, y: floatingPasteLayer.y, w: floatingPasteLayer.w, h: floatingPasteLayer.h };
+    if (floatingPasteLayer.warpCorners) floatingPasteLayer.warpCorners = defaultWarpCorners(floatingPasteLayer);
+    assetSelection = floatingLayerBounds(floatingPasteLayer);
     drawAssetPreview();
     updateSelectionDetails(`Floating layer scaled to ${percent}% (${floatingPasteLayer.w} x ${floatingPasteLayer.h}px).`);
   }
@@ -2496,6 +2677,8 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       const x = assetSelection ? assetSelection.x : Math.round((image.naturalWidth - pasteImage.naturalWidth) / 2);
       const y = assetSelection ? assetSelection.y : Math.round((image.naturalHeight - pasteImage.naturalHeight) / 2);
       floatingPasteLayer = { assetId: asset.id, src: copiedAssetSprite.src, image: pasteImage, x: clamp(x, 0, Math.max(0, image.naturalWidth - pasteImage.naturalWidth)), y: clamp(y, 0, Math.max(0, image.naturalHeight - pasteImage.naturalHeight)), sourceW: pasteImage.naturalWidth, sourceH: pasteImage.naturalHeight, w: pasteImage.naturalWidth, h: pasteImage.naturalHeight, scale: 1, sourceAssetId: copiedAssetSprite.sourceAssetId, sourceName: copiedAssetSprite.sourceName, flipX: pasteCopiedFlipX, flipY: pasteCopiedFlipY, dragging: false };
+      assetWarpMode = false;
+      assetWarpHandle = null;
       assetMoveLayerMode = true;
       assetSelection = { x: floatingPasteLayer.x, y: floatingPasteLayer.y, w: layerDrawWidth(floatingPasteLayer), h: layerDrawHeight(floatingPasteLayer) };
       drawAssetPreview();
@@ -2508,6 +2691,8 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     const size = `${layerDrawWidth(floatingPasteLayer)} x ${layerDrawHeight(floatingPasteLayer)}px`;
     floatingPasteLayer = null;
     assetMoveLayerMode = false;
+    assetWarpMode = false;
+    assetWarpHandle = null;
     assetSelection = null;
     drawAssetPreview();
     updateSelectionDetails(`Cancelled floating layer (${size}). Asset was not changed.`);
@@ -2525,13 +2710,16 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(image, 0, 0);
     drawFloatingPasteLayer(ctx, layer);
+    const mergedBounds = floatingLayerBounds(layer);
     const src = canvas.toDataURL("image/png");
     asset.src = src;
     asset.name = `${asset.name.replace(/\.[^.]+$/, "")}.png`;
-    asset.backgroundRemoved = { ...(asset.backgroundRemoved || {}), pastedSprite: { sourceAssetId: layer.sourceAssetId, sourceName: layer.sourceName, x: layer.x, y: layer.y, width: layerDrawWidth(layer), height: layerDrawHeight(layer), scale: layer.scale || 1, flipX: layer.flipX, flipY: layer.flipY, appliedAt: Date.now() } };
+    asset.backgroundRemoved = { ...(asset.backgroundRemoved || {}), pastedSprite: { sourceAssetId: layer.sourceAssetId, sourceName: layer.sourceName, x: mergedBounds.x, y: mergedBounds.y, width: mergedBounds.w, height: mergedBounds.h, scale: layer.scale || 1, flipX: layer.flipX, flipY: layer.flipY, warped: !!layer.warpCorners, appliedAt: Date.now() } };
     floatingPasteLayer = null;
     assetMoveLayerMode = false;
-    assetSelection = { x: layer.x, y: layer.y, w: layerDrawWidth(layer), h: layerDrawHeight(layer) };
+    assetWarpMode = false;
+    assetWarpHandle = null;
+    assetSelection = mergedBounds;
     const replacement = new Image();
     replacement.onload = refreshAssetViews;
     replacement.src = src;
@@ -5782,4 +5970,3 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     }
   }).catch(() => {});
 })();
-

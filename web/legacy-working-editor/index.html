@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -345,6 +345,7 @@
             <button id="copySelectedSprite" disabled>Copy selection</button>
             <button id="pasteCopiedSprite" disabled>Paste as floating layer</button>
             <button id="moveFloatingPaste" disabled>Move layer</button>
+            <button id="warpFloatingPaste" disabled>Warp layer</button>
             <button id="mergeFloatingPaste" disabled>Merge layer</button>
             <button id="cancelFloatingPaste" disabled>Cancel layer</button>
             <button id="undoAssetEdit" disabled>Undo last asset edit</button>
@@ -354,6 +355,11 @@
               <button id="resetFloatingLayerScale" disabled>Reset scale</button>
               <label class="check"><input id="pasteFlipX" type="checkbox" disabled> Flip H</label>
               <label class="check"><input id="pasteFlipY" type="checkbox" disabled> Flip V</label>
+            </div>
+            <div class="warp-layer-tools">
+              <strong>Warp / puppet draft</strong>
+              <span>Copy/paste a part as a floating layer, press Warp layer, then drag the four corner pins. Apply with Merge layer or cancel without changing the asset.</span>
+              <button id="resetWarpLayer" disabled>Reset warp corners</button>
             </div>
             <button id="downloadSelectedSprite" disabled>Download selected PNG</button>
           </div>
