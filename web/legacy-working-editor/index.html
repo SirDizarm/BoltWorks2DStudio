@@ -330,26 +330,6 @@
           <span>Choose an asset on the left, or import a new image.</span>
         </div>
         <div id="assetEditor" hidden>
-          <div class="transparency-tools">
-            <label class="check"><input id="transparentBackground" type="checkbox" checked> Preview background removal</label>
-            <button id="pickBackground">Pick background color</button>
-            <label>Remove mode<select id="backgroundRemoveMode"><option value="global">Global color / old tolerance</option><option value="outside">Outside connected color only</option></select></label>
-            <label class="color-field">Color<input id="backgroundColor" type="color" value="#9a9e91"></label>
-            <label class="tolerance-field">Tolerance <span id="toleranceValue">28</span>
-              <input id="colorTolerance" type="range" min="0" max="150" value="28">
-            </label>
-          </div>
-          <p class="extract-help">Pick the background color and adjust tolerance until the checkerboard looks clean. Global mode removes matching pixels everywhere. Outside connected mode only removes matching pixels connected to the image edge, protecting same-color pixels inside the object. This is a preview until you use one of the save actions below.</p>
-          <div id="transparencyNotice" class="transparency-notice preview-only">
-            <strong>Preview only</strong>
-            <span>The current saved asset is still unchanged. Placing or downloading it will include its original background.</span>
-          </div>
-          <div class="transparency-save-actions">
-            <label class="check"><input id="trimTransparentAsset" type="checkbox" checked> Trim empty transparent edges</label>
-            <button id="createTransparentCopy" class="accent">Create transparent copy</button>
-            <button id="applyTransparencyAsset">Apply to this asset</button>
-            <button id="downloadTransparentAsset">Download transparent PNG</button>
-          </div>
           <div class="sprite-selection-actions">
             <strong>Selected sprite</strong>
             <span id="selectionDetails" class="selection-details">No sprite selected yet.</span>
@@ -422,6 +402,26 @@
             </label>
             <button id="fitAsset">Fit sheet</button>
             <button id="clearAssetSelection">Clear selection</button>
+          </div>
+          <div class="transparency-tools">
+            <label class="check"><input id="transparentBackground" type="checkbox" checked> Preview background removal</label>
+            <button id="pickBackground">Pick background color</button>
+            <label>Remove mode<select id="backgroundRemoveMode"><option value="global">Global color / old tolerance</option><option value="outside">Outside connected color only</option></select></label>
+            <label class="color-field">Color<input id="backgroundColor" type="color" value="#9a9e91"></label>
+            <label class="tolerance-field">Tolerance <span id="toleranceValue">28</span>
+              <input id="colorTolerance" type="range" min="0" max="150" value="28">
+            </label>
+          </div>
+          <p class="extract-help">Pick the background color and adjust tolerance until the checkerboard looks clean. Global mode removes matching pixels everywhere. Outside connected mode only removes matching pixels connected to the image edge, protecting same-color pixels inside the object. This is a preview until you use one of the save actions below.</p>
+          <div id="transparencyNotice" class="transparency-notice preview-only">
+            <strong>Preview only</strong>
+            <span>The current saved asset is still unchanged. Placing or downloading it will include its original background.</span>
+          </div>
+          <div class="transparency-save-actions">
+            <label class="check"><input id="trimTransparentAsset" type="checkbox" checked> Trim empty transparent edges</label>
+            <button id="createTransparentCopy" class="accent">Create transparent copy</button>
+            <button id="applyTransparencyAsset">Apply to this asset</button>
+            <button id="downloadTransparentAsset">Download transparent PNG</button>
           </div>
           <div class="asset-editor-fields">
             <label>Asset name<input id="assetName" type="text"></label>
