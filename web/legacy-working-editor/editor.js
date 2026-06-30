@@ -1773,15 +1773,23 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     drawAssetPreview();
   }
 
+  function paintPreviewColor(settings) {
+    if (settings.tool === "erase") return { r: 255, g: 93, b: 78 };
+    const picked = hexToRgb(settings.color || "#ffd15a");
+    const inverted = { r: 255 - picked.r, g: 255 - picked.g, b: 255 - picked.b };
+    const luminance = (inverted.r * 0.299) + (inverted.g * 0.587) + (inverted.b * 0.114);
+    if (luminance > 95 && luminance < 175) return luminance < 135 ? { r: 255, g: 238, b: 120 } : { r: 45, g: 225, b: 255 };
+    return inverted;
+  }
+
   function drawPaintCursorPreview(point) {
     const settings = paintSettings();
     const size = Math.max(1, Math.round(settings.size));
     const radius = size / 2;
     const isPen = settings.tool === "pen";
-    const isErase = settings.tool === "erase";
-    const previewRgb = hexToRgb(settings.color || "#ffd05f");
-    const color = isErase ? "rgba(255, 107, 95, .38)" : `rgba(${previewRgb.r}, ${previewRgb.g}, ${previewRgb.b}, .42)`;
-    const centerColor = isErase ? "#ff6b5f" : settings.color || "#ffd05f";
+    const previewRgb = paintPreviewColor(settings);
+    const color = `rgba(${previewRgb.r}, ${previewRgb.g}, ${previewRgb.b}, .48)`;
+    const centerColor = `rgb(${previewRgb.r}, ${previewRgb.g}, ${previewRgb.b})`;
     const x = Math.round(point.x - size / 2);
     const y = Math.round(point.y - size / 2);
 
@@ -1799,15 +1807,6 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
 
     assetCtx.fillStyle = centerColor;
     assetCtx.fillRect(Math.round(point.x), Math.round(point.y), Math.max(1 / assetZoom, .25), Math.max(1 / assetZoom, .25));
-    if (isErase) {
-      const slash = Math.max(size * .22, 1);
-      assetCtx.strokeStyle = "rgba(255, 255, 255, .85)";
-      assetCtx.lineWidth = Math.max(1 / assetZoom, .15);
-      assetCtx.beginPath();
-      assetCtx.moveTo(point.x - slash, point.y + slash);
-      assetCtx.lineTo(point.x + slash, point.y - slash);
-      assetCtx.stroke();
-    }
     assetCtx.restore();
   }
   function updatePaintControls() {
