@@ -1894,13 +1894,39 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   };
   $("#closeAssetStudio").onclick = closeAssetStudio;
   function closeAssetStudio() {
+    cancelAssetStudioTransientModes(false);
     $("#assetStudio").classList.remove("active");
     $("#assetStudio").setAttribute("aria-hidden", "true");
   }
   $("#studioImport").onclick = () => $("#assetFiles").click();
+
+  function cancelAssetStudioTransientModes(redraw = true) {
+    pickBackgroundActive = false;
+    paintColorPickActive = false;
+    assetPaintStroke = null;
+    assetSelectionDrag = null;
+    assetWarpHandle = null;
+    if (floatingPasteLayer?.dragging) {
+      floatingPasteLayer.dragging = false;
+      floatingPasteLayer.dragLinkedStarts = null;
+    }
+    if ($("#pickBackground")) $("#pickBackground").classList.remove("pick-active");
+    if ($("#pickPaintColor")) $("#pickPaintColor").classList.remove("active");
+    if (assetPreview) {
+      assetPreview.classList.remove("picking-color");
+      assetPreview.classList.toggle("painting", assetPaintTool !== "select");
+      assetPreview.classList.toggle("moving-layer", assetMoveLayerMode && floatingPasteLayer?.assetId === selectedAssetId);
+    }
+    if (redraw) {
+      drawAssetPreview();
+      updateSelectionDetails();
+    }
+  }
   function setAssetPaintTool(tool) {
     assetPaintTool = ["select", "pen", "brush", "spray", "erase"].includes(tool) ? tool : "select";
     if (tool !== "pick-color") paintColorPickActive = false;
+    pickBackgroundActive = false;
+    if ($("#pickBackground")) $("#pickBackground").classList.remove("pick-active");
     [["paintSelectTool", "select"], ["paintPenTool", "pen"], ["paintBrushTool", "brush"], ["paintSprayTool", "spray"], ["paintEraseTool", "erase"]].forEach(([id, value]) => {
       const button = $(`#${id}`);
       if (button) button.classList.toggle("active", assetPaintTool === value);
@@ -2126,6 +2152,9 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     assetWarpMode = false;
     assetWarpHandle = null;
     pickBackgroundActive = false;
+    paintColorPickActive = false;
+    if ($("#pickPaintColor")) $("#pickPaintColor").classList.remove("active");
+    if (assetPreview) assetPreview.classList.remove("picking-color");
     $("#pickBackground").classList.remove("pick-active");
   }
   function previewPoint(event) {
@@ -2639,26 +2668,11 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   if ($("#paintSize")) $("#paintSize").oninput = () => { updatePaintControls(); drawAssetPreview(); };
   if ($("#paintOpacity")) $("#paintOpacity").oninput = () => { updatePaintControls(); drawAssetPreview(); };
   if ($("#paintSprayTolerance")) $("#paintSprayTolerance").oninput = () => { updatePaintControls(); drawAssetPreview(); };
-  if ($("#pickPaintColor")) $("#pickPaintColor").onclick = async () => {
-    paintColorPickActive = false;
-    if (assetPreview) assetPreview.classList.remove("picking-color");
-    if ($("#pickPaintColor")) $("#pickPaintColor").classList.remove("active");
-    if (window.EyeDropper) {
-      try {
-        const result = await new EyeDropper().open();
-        if (result?.sRGBHex && $("#paintColor")) {
-          $("#paintColor").value = result.sRGBHex;
-          drawAssetPreview();
-        }
-        return;
-      } catch {
-        return;
-      }
-    }
-    $("#paintColor")?.click();
+  if ($("#pickPaintColor")) $("#pickPaintColor").onclick = () => {
+    setPaintColorPicker(!paintColorPickActive);
   };
   if ($("#paintColor")) {
-    $("#paintColor").oninput = event => { drawAssetPreview(); event.target.blur(); };
+    $("#paintColor").oninput = () => { drawAssetPreview(); };
     $("#paintColor").onchange = event => { drawAssetPreview(); event.target.blur(); };
   }
   if ($("#paintUndo")) $("#paintUndo").onclick = () => {
@@ -2687,8 +2701,13 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   setAssetPaintTool("select");
   updatePaintControls();
   $("#pickBackground").onclick = () => {
+    paintColorPickActive = false;
+    if ($("#pickPaintColor")) $("#pickPaintColor").classList.remove("active");
+    if (assetPreview) assetPreview.classList.remove("picking-color");
     pickBackgroundActive = !pickBackgroundActive;
     $("#pickBackground").classList.toggle("pick-active", pickBackgroundActive);
+    assetStatusMessage = pickBackgroundActive ? "Click the asset image to sample the background color." : "";
+    updateSelectionDetails();
   };
   $("#transparentBackground").onchange = event => {
     transparencyPreview = event.target.checked;
@@ -5808,6 +5827,13 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   }
 
   window.addEventListener("keydown", event => {
+    if (!playing && event.code === "Escape" && $("#assetStudio")?.classList.contains("active") && (paintColorPickActive || pickBackgroundActive || assetPaintStroke || assetSelectionDrag || assetWarpHandle || floatingPasteLayer?.dragging)) {
+      cancelAssetStudioTransientModes(true);
+      assetStatusMessage = "Picker/tool cancelled.";
+      updateSelectionDetails();
+      event.preventDefault();
+      return;
+    }
     if (isTypingTarget(event.target)) return;
     if (!playing && assetLassoMode && event.code === "Escape") {
       assetLassoMode = false;
