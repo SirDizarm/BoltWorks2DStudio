@@ -113,6 +113,7 @@
   let assetStatusMessage = "";
   let copiedAssetSprite = null;
   let floatingPasteLayer = null;
+  let selectedAssetLayerId = null;
   let assetMoveLayerMode = false;
   let assetWarpMode = false;
   let assetWarpHandle = null;
@@ -980,6 +981,7 @@
     if (!asset) return;
     $("#assetName").value = asset.name;
     if ($("#assetCategory")) $("#assetCategory").value = normalizeAssetCategory(asset);
+    hydrateAssetLayers(asset);
     const image = images.get(asset.id);
     const used = project.objects.filter(o => o.assetId === asset.id).length;
     const rigged = bodyParts.filter(part => project.rig[part] === asset.id).map(part => prettyPart[part]);
@@ -993,8 +995,99 @@
     $("#colorTolerance").value = colorTolerance;
     $("#toleranceValue").textContent = colorTolerance;
     renderTransparencyNotice(asset);
+    renderAssetLayerList(asset);
     updateSelectionDetails();
     if (image?.naturalWidth) drawAssetPreview();
+  }
+
+  function setLayerImage(layer, image) {
+    if (!layer) return;
+    Object.defineProperty(layer, "image", { value: image, writable: true, configurable: true, enumerable: false });
+  }
+
+  function ensureLayeredSource(asset) {
+    if (!asset) return null;
+    if (!asset.layeredSource || !Array.isArray(asset.layeredSource.layers)) {
+      asset.layeredSource = { version: 1, width: 0, height: 0, layers: [] };
+    }
+    asset.layeredSource.version = asset.layeredSource.version || 1;
+    return asset.layeredSource;
+  }
+
+  function hydrateAssetLayers(asset) {
+    const source = ensureLayeredSource(asset);
+    if (!source) return [];
+    source.layers.forEach((layer, index) => {
+      layer.id = layer.id || `layer-${uid()}`;
+      layer.name = layer.name || `Layer ${index + 1}`;
+      layer.x = Math.round(Number(layer.x) || 0);
+      layer.y = Math.round(Number(layer.y) || 0);
+      layer.sourceW = Math.max(1, Math.round(Number(layer.sourceW || layer.w) || 1));
+      layer.sourceH = Math.max(1, Math.round(Number(layer.sourceH || layer.h) || 1));
+      layer.scale = Math.max(.01, Number(layer.scale) || 1);
+      layer.w = Math.max(1, Math.round(Number(layer.w) || layer.sourceW * layer.scale));
+      layer.h = Math.max(1, Math.round(Number(layer.h) || layer.sourceH * layer.scale));
+      layer.rotation = Math.round(Number(layer.rotation) || 0);
+      layer.visible = layer.visible !== false;
+      layer.linked = !!layer.linked;
+      layer.flipX = !!layer.flipX;
+      layer.flipY = !!layer.flipY;
+      if (layer.src && !layer.image) {
+        const img = new Image();
+        img.onload = () => {
+          layer.sourceW = layer.sourceW || img.naturalWidth;
+          layer.sourceH = layer.sourceH || img.naturalHeight;
+          drawAssetPreview();
+          renderAssetLayerList(asset);
+        };
+        setLayerImage(layer, img);
+        img.src = layer.src;
+      }
+    });
+    source.layers = source.layers.filter(layer => layer.src);
+    if (selectedAssetLayerId && !source.layers.some(layer => layer.id === selectedAssetLayerId)) selectedAssetLayerId = null;
+    if (!floatingPasteLayer || floatingPasteLayer.assetId !== asset.id || (selectedAssetLayerId && floatingPasteLayer.id !== selectedAssetLayerId)) {
+      floatingPasteLayer = source.layers.find(layer => layer.id === selectedAssetLayerId) || null;
+    }
+    return source.layers;
+  }
+
+  function currentAssetLayers() {
+    const asset = project.assets.find(a => a.id === selectedAssetId);
+    return asset ? hydrateAssetLayers(asset) : [];
+  }
+
+  function setActiveAssetLayer(layerId) {
+    const asset = project.assets.find(a => a.id === selectedAssetId);
+    const layer = asset ? hydrateAssetLayers(asset).find(item => item.id === layerId) : null;
+    selectedAssetLayerId = layer?.id || null;
+    floatingPasteLayer = layer || null;
+    assetMoveLayerMode = !!layer;
+    assetWarpMode = false;
+    assetWarpHandle = null;
+    if (assetPreview) {
+      assetPreview.classList.toggle("moving-layer", assetMoveLayerMode);
+      assetPreview.classList.remove("warping-layer");
+    }
+    renderAssetLayerList(asset);
+    drawAssetPreview();
+    updateSelectionDetails(layer ? `Selected layer "${layer.name}". Drag it in the preview or use the layer controls.` : "No editable layer selected.");
+  }
+
+  function renderAssetLayerList(asset = project.assets.find(a => a.id === selectedAssetId)) {
+    const list = $("#assetLayerList");
+    const summary = $("#assetLayerSummary");
+    if (!list || !summary) return;
+    const layers = asset ? hydrateAssetLayers(asset) : [];
+    summary.textContent = layers.length ? `${layers.length} editable layer${layers.length === 1 ? "" : "s"}` : "Flat PNG only";
+    list.innerHTML = layers.length ? layers.map((layer, index) => `
+      <div class="asset-layer-row ${layer.id === selectedAssetLayerId ? "selected" : ""} ${layer.visible === false ? "hidden-item" : ""}" data-layer-id="${layer.id}">
+        <button class="asset-layer-pick" title="Select this layer">${index + 1}</button>
+        <span><strong>${escapeHtml(layer.name)}</strong><small>${Math.round(layer.x)}, ${Math.round(layer.y)} - ${Math.round(layer.w)} x ${Math.round(layer.h)}</small></span>
+        <button class="asset-layer-hide" title="${layer.visible === false ? "Show" : "Hide"}">${layer.visible === false ? "show" : "hide"}</button>
+        <button class="asset-layer-link" title="Link/move with other linked layers">${layer.linked ? "linked" : "link"}</button>
+        <button class="asset-layer-delete danger" title="Remove this editable layer">X</button>
+      </div>`).join("") : `<div class="object-list-empty">No editable layers yet. Paste a copied selection to create one.</div>`;
   }
 
   function renderTransparencyNotice(asset) {
@@ -1155,8 +1248,9 @@
     assetCtx.clearRect(0, 0, assetPreview.width, assetPreview.height);
     const pendingPaintCanvas = assetPaintPending?.assetId === selectedAssetId ? assetPaintPending.canvas : null;
     assetCtx.drawImage(pendingPaintCanvas || processedAssetCanvas(asset, image), 0, 0);
+    const layers = hydrateAssetLayers(asset);
+    layers.filter(layer => layer.visible !== false && layer.image?.complete).forEach(layer => drawFloatingPasteLayer(assetCtx, layer));
     if (floatingPasteLayer?.assetId === selectedAssetId && floatingPasteLayer.image?.complete) {
-      drawFloatingPasteLayer(assetCtx, floatingPasteLayer);
       const bounds = floatingLayerBounds(floatingPasteLayer);
       assetCtx.save();
       assetCtx.strokeStyle = "#ffef95";
@@ -1262,6 +1356,7 @@
     $("#selectionDetails").textContent = message || assetStatusMessage || (assetSelection
       ? `${assetSelection.polygon?.length ? "Lasso" : "Selected sprite"}: ${assetSelection.w} x ${assetSelection.h}px at ${assetSelection.x}, ${assetSelection.y}`
       : "No sprite selected yet.");
+    renderAssetLayerList();
   }
 
   function renderRig() {
@@ -2021,6 +2116,11 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     assetPaintLineStart = null;
     assetPreviewCache = null;
     assetStatusMessage = "";
+    floatingPasteLayer = null;
+    selectedAssetLayerId = null;
+    assetMoveLayerMode = false;
+    assetWarpMode = false;
+    assetWarpHandle = null;
     pickBackgroundActive = false;
     $("#pickBackground").classList.remove("pick-active");
   }
@@ -2288,6 +2388,10 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     floatingPasteLayer.dragStartX = floatingPasteLayer.x;
     floatingPasteLayer.dragStartY = floatingPasteLayer.y;
     floatingPasteLayer.dragStartCorners = floatingPasteLayer.warpCorners ? JSON.parse(JSON.stringify(floatingPasteLayer.warpCorners)) : null;
+    floatingPasteLayer.dragLinkedStarts = floatingPasteLayer.linked ? currentAssetLayers()
+      .filter(layer => layer.id !== floatingPasteLayer.id && layer.linked)
+      .map(layer => ({ layer, x: layer.x, y: layer.y, corners: layer.warpCorners ? JSON.parse(JSON.stringify(layer.warpCorners)) : null }))
+      : [];
     assetSelection = bounds;
     drawAssetPreview();
     updateSelectionDetails(`Moving floating layer: ${layerDrawWidth(floatingPasteLayer)} x ${layerDrawHeight(floatingPasteLayer)}px. Drag to place it, then use Merge layer or Cancel layer.`);
@@ -2461,6 +2565,14 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
         floatingPasteLayer.x = (floatingPasteLayer.dragStartX ?? floatingPasteLayer.x) + dx;
         floatingPasteLayer.y = (floatingPasteLayer.dragStartY ?? floatingPasteLayer.y) + dy;
       }
+      (floatingPasteLayer.dragLinkedStarts || []).forEach(start => {
+        if (start.corners && start.layer.warpCorners) {
+          for (const key of Object.keys(start.corners)) start.layer.warpCorners[key] = { x: start.corners[key].x + dx, y: start.corners[key].y + dy };
+        } else {
+          start.layer.x = start.x + dx;
+          start.layer.y = start.y + dy;
+        }
+      });
       assetSelection = floatingLayerBounds(floatingPasteLayer);
       drawAssetPreview();
       updateSelectionDetails(`Floating layer: ${layerDrawWidth(floatingPasteLayer)} x ${layerDrawHeight(floatingPasteLayer)}px at ${floatingPasteLayer.x}, ${floatingPasteLayer.y}.`);
@@ -2485,7 +2597,12 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     updateSelectionDetails();
   });
   assetPreview.addEventListener("pointerup", () => {
-    if (floatingPasteLayer?.dragging) floatingPasteLayer.dragging = false;
+    if (floatingPasteLayer?.dragging) {
+      floatingPasteLayer.dragging = false;
+      floatingPasteLayer.dragLinkedStarts = null;
+      renderAssetLayerList();
+      markDirty();
+    }
     if (assetWarpHandle) assetWarpHandle = null;
     if (assetPaintStroke) {
       const canvas = assetPaintStroke.canvas;
@@ -2645,6 +2762,45 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   if ($("#mergeFloatingPaste")) $("#mergeFloatingPaste").onclick = mergeFloatingPasteLayer;
   if ($("#cancelFloatingPaste")) $("#cancelFloatingPaste").onclick = cancelFloatingPasteLayer;
   if ($("#undoAssetEdit")) $("#undoAssetEdit").onclick = restoreLastAssetUndo;
+  if ($("#assetLayerList")) $("#assetLayerList").onclick = event => {
+    const row = event.target.closest(".asset-layer-row");
+    if (!row) return;
+    const asset = project.assets.find(a => a.id === selectedAssetId);
+    const layer = hydrateAssetLayers(asset).find(item => item.id === row.dataset.layerId);
+    if (!asset || !layer) return;
+    if (event.target.closest(".asset-layer-hide")) {
+      layer.visible = layer.visible === false;
+      drawAssetPreview();
+      renderAssetLayerList(asset);
+      markDirty();
+      return;
+    }
+    if (event.target.closest(".asset-layer-link")) {
+      layer.linked = !layer.linked;
+      renderAssetLayerList(asset);
+      markDirty();
+      return;
+    }
+    if (event.target.closest(".asset-layer-delete")) {
+      if (!confirm(`Remove editable layer "${layer.name}"?\n\nThe flat base PNG will not be changed.`)) return;
+      asset.layeredSource.layers = asset.layeredSource.layers.filter(item => item.id !== layer.id);
+      if (selectedAssetLayerId === layer.id) {
+        selectedAssetLayerId = null;
+        floatingPasteLayer = null;
+        assetMoveLayerMode = false;
+        assetWarpMode = false;
+      }
+      drawAssetPreview();
+      renderAssetLayerList(asset);
+      updateSelectionDetails(`Removed layer "${layer.name}".`);
+      markDirty();
+      return;
+    }
+    setActiveAssetLayer(layer.id);
+  };
+  if ($("#downloadLayeredAsset")) $("#downloadLayeredAsset").onclick = downloadLayeredAssetFile;
+  if ($("#loadLayeredAsset")) $("#loadLayeredAsset").onclick = () => $("#layeredAssetFile")?.click();
+  if ($("#layeredAssetFile")) $("#layeredAssetFile").onchange = loadLayeredAssetFile;
   function setFloatingLayerScalePercent(value) {
     if (!(floatingPasteLayer?.assetId === selectedAssetId)) return;
     const image = images.get(selectedAssetId);
@@ -2751,26 +2907,37 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     pasteImage.onload = () => {
       const x = assetSelection ? assetSelection.x : Math.round((image.naturalWidth - pasteImage.naturalWidth) / 2);
       const y = assetSelection ? assetSelection.y : Math.round((image.naturalHeight - pasteImage.naturalHeight) / 2);
-      floatingPasteLayer = { assetId: asset.id, src: copiedAssetSprite.src, image: pasteImage, x: clamp(x, 0, Math.max(0, image.naturalWidth - pasteImage.naturalWidth)), y: clamp(y, 0, Math.max(0, image.naturalHeight - pasteImage.naturalHeight)), sourceW: pasteImage.naturalWidth, sourceH: pasteImage.naturalHeight, w: pasteImage.naturalWidth, h: pasteImage.naturalHeight, scale: 1, sourceAssetId: copiedAssetSprite.sourceAssetId, sourceName: copiedAssetSprite.sourceName, flipX: pasteCopiedFlipX, flipY: pasteCopiedFlipY, rotation: 0, dragging: false };
+      const source = ensureLayeredSource(asset);
+      const layer = { id: uid(), assetId: asset.id, name: copiedAssetSprite.sourceName ? `Layer from ${copiedAssetSprite.sourceName.replace(/\.[^.]+$/, "")}` : `Layer ${source.layers.length + 1}`, src: copiedAssetSprite.src, x: clamp(x, 0, Math.max(0, image.naturalWidth - pasteImage.naturalWidth)), y: clamp(y, 0, Math.max(0, image.naturalHeight - pasteImage.naturalHeight)), sourceW: pasteImage.naturalWidth, sourceH: pasteImage.naturalHeight, w: pasteImage.naturalWidth, h: pasteImage.naturalHeight, scale: 1, sourceAssetId: copiedAssetSprite.sourceAssetId, sourceName: copiedAssetSprite.sourceName, flipX: pasteCopiedFlipX, flipY: pasteCopiedFlipY, rotation: 0, visible: true, linked: false, dragging: false };
+      setLayerImage(layer, pasteImage);
+      source.layers.push(layer);
+      floatingPasteLayer = layer;
+      selectedAssetLayerId = layer.id;
       assetWarpMode = false;
       assetWarpHandle = null;
       assetMoveLayerMode = true;
       assetSelection = { x: floatingPasteLayer.x, y: floatingPasteLayer.y, w: layerDrawWidth(floatingPasteLayer), h: layerDrawHeight(floatingPasteLayer) };
       drawAssetPreview();
       updateSelectionDetails(`Floating layer placed: ${layerDrawWidth(floatingPasteLayer)} x ${layerDrawHeight(floatingPasteLayer)}px at ${floatingPasteLayer.x}, ${floatingPasteLayer.y}. Drag it, then use Merge layer or Cancel layer.`);
+      markDirty();
     };
     pasteImage.src = copiedAssetSprite.src;
   }
   function cancelFloatingPasteLayer() {
     if (!(floatingPasteLayer?.assetId === selectedAssetId)) return;
+    const asset = project.assets.find(a => a.id === selectedAssetId);
     const size = `${layerDrawWidth(floatingPasteLayer)} x ${layerDrawHeight(floatingPasteLayer)}px`;
+    if (asset?.layeredSource?.layers) asset.layeredSource.layers = asset.layeredSource.layers.filter(layer => layer.id !== floatingPasteLayer.id);
     floatingPasteLayer = null;
+    selectedAssetLayerId = null;
     assetMoveLayerMode = false;
     assetWarpMode = false;
     assetWarpHandle = null;
     assetSelection = null;
     drawAssetPreview();
+    renderAssetLayerList(asset);
     updateSelectionDetails(`Cancelled floating layer (${size}). Asset was not changed.`);
+    markDirty();
   }
   function mergeFloatingPasteLayer() {
     const asset = project.assets.find(a => a.id === selectedAssetId);
@@ -2790,7 +2957,9 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     asset.src = src;
     asset.name = `${asset.name.replace(/\.[^.]+$/, "")}.png`;
     asset.backgroundRemoved = { ...(asset.backgroundRemoved || {}), pastedSprite: { sourceAssetId: layer.sourceAssetId, sourceName: layer.sourceName, x: mergedBounds.x, y: mergedBounds.y, width: mergedBounds.w, height: mergedBounds.h, scale: layer.scale || 1, rotation: Number(layer.rotation) || 0, flipX: layer.flipX, flipY: layer.flipY, warped: !!layer.warpCorners, appliedAt: Date.now() } };
+    if (asset.layeredSource?.layers) asset.layeredSource.layers = asset.layeredSource.layers.filter(item => item.id !== layer.id);
     floatingPasteLayer = null;
+    selectedAssetLayerId = null;
     assetMoveLayerMode = false;
     assetWarpMode = false;
     assetWarpHandle = null;
@@ -2854,6 +3023,95 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
         updateSelectionDetails(`Downloaded ${filename} (${canvas.width} x ${canvas.height}px).`);
       }
     }, "image/png");
+  }
+
+  function serializableLayer(layer) {
+    const clean = {};
+    ["id", "name", "src", "x", "y", "sourceW", "sourceH", "w", "h", "scale", "sourceAssetId", "sourceName", "flipX", "flipY", "rotation", "visible", "linked", "warpCorners"].forEach(key => {
+      if (layer[key] !== undefined) clean[key] = key === "warpCorners" ? JSON.parse(JSON.stringify(layer[key])) : layer[key];
+    });
+    return clean;
+  }
+
+  function layeredAssetPayload(asset) {
+    const image = images.get(asset?.id);
+    const source = ensureLayeredSource(asset);
+    return {
+      format: "boltworks.layered-asset",
+      version: 1,
+      savedAt: new Date().toISOString(),
+      asset: {
+        name: asset?.name || "layered-asset.png",
+        category: normalizeAssetCategory(asset),
+        width: image?.naturalWidth || source.width || 0,
+        height: image?.naturalHeight || source.height || 0,
+        baseSrc: asset?.src || "",
+        backgroundRemoved: asset?.backgroundRemoved || null
+      },
+      layers: hydrateAssetLayers(asset).map(serializableLayer)
+    };
+  }
+
+  function downloadLayeredAssetFile() {
+    const asset = project.assets.find(a => a.id === selectedAssetId);
+    if (!asset) return;
+    const payload = layeredAssetPayload(asset);
+    const baseName = (asset.name || "boltworks-layered-asset").replace(/\.[^.]+$/, "");
+    downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }), `${baseName}.boltasset`);
+    updateSelectionDetails(`Saved layered work file for "${asset.name}" with ${payload.layers.length} editable layer${payload.layers.length === 1 ? "" : "s"}.`);
+  }
+
+  function loadLayeredAssetFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    const asset = project.assets.find(a => a.id === selectedAssetId);
+    if (!file || !asset) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const payload = JSON.parse(String(reader.result || "{}"));
+        if (payload.format !== "boltworks.layered-asset" || !Array.isArray(payload.layers)) {
+          alert("That is not a valid BoltWorks layered asset file.");
+          return;
+        }
+        const replaceBase = payload.asset?.baseSrc && confirm("Load the flat base PNG from this layered file too?\n\nCancel keeps the currently selected base image and only loads the editable layers.");
+        if (replaceBase) {
+          asset.src = payload.asset.baseSrc;
+          asset.name = payload.asset.name || asset.name;
+          asset.category = assetCategories.includes(payload.asset.category) ? payload.asset.category : normalizeAssetCategory(asset);
+          const replacement = new Image();
+          replacement.onload = refreshAssetViews;
+          replacement.src = asset.src;
+          images.set(asset.id, replacement);
+        }
+        asset.layeredSource = {
+          version: 1,
+          width: payload.asset?.width || 0,
+          height: payload.asset?.height || 0,
+          layers: payload.layers.map((layer, index) => ({
+            ...serializableLayer(layer),
+            id: layer.id || uid(),
+            assetId: asset.id,
+            name: layer.name || `Layer ${index + 1}`,
+            visible: layer.visible !== false
+          }))
+        };
+        selectedAssetLayerId = asset.layeredSource.layers[0]?.id || null;
+        floatingPasteLayer = null;
+        hydrateAssetLayers(asset);
+        floatingPasteLayer = asset.layeredSource.layers.find(layer => layer.id === selectedAssetLayerId) || null;
+        assetMoveLayerMode = !!floatingPasteLayer;
+        assetWarpMode = false;
+        assetPreviewCache = null;
+        renderAssets();
+        renderAssetEditor();
+        updateSelectionDetails(`Loaded ${asset.layeredSource.layers.length} editable layer${asset.layeredSource.layers.length === 1 ? "" : "s"} into "${asset.name}".`);
+        markDirty();
+      } catch (error) {
+        alert(`Could not load layered asset file: ${error.message}`);
+      }
+    };
+    reader.readAsText(file);
   }
   $("#keepSelectionPixels").onclick = () => applySelectionPixelDelete("outside");
   $("#eraseSelectionPixels").onclick = () => applySelectionPixelDelete("inside");

@@ -377,6 +377,18 @@
               <span>Copy/paste a part as a floating layer, press Warp layer, then drag the corner and side pins. Apply with Merge layer or cancel without changing the asset.</span>
               <button id="resetWarpLayer" disabled>Reset warp corners</button>
             </div>
+            <div class="asset-layer-panel">
+              <div class="asset-layer-panel-title">
+                <strong>Editable layers</strong>
+                <span id="assetLayerSummary">Flat PNG only</span>
+              </div>
+              <div id="assetLayerList" class="asset-layer-list"></div>
+              <div class="asset-layer-actions">
+                <button id="downloadLayeredAsset">Save layered work file</button>
+                <button id="loadLayeredAsset">Load layered work file</button>
+              </div>
+              <p class="hint">Layered work files keep pasted parts separate. PNG buttons still export/merge flattened pixels.</p>
+            </div>
             <button id="downloadSelectedSprite" disabled>Download selected PNG</button>
           </div>
           <div class="pixel-edit-actions">
@@ -462,6 +474,7 @@
       </main>
     </div>
     <input id="replaceAssetFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+    <input id="layeredAssetFile" type="file" accept="application/json,.json,.boltasset" hidden>
   </section>
 
   <section id="characterAnimator" class="character-animator" aria-hidden="true">
