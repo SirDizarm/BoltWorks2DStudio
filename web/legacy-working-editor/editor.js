@@ -1305,6 +1305,7 @@
     $("#extractAsset").disabled = !assetSelection;
     $("#downloadSelectedSprite").disabled = !assetSelection;
     if ($("#copySelectedSprite")) $("#copySelectedSprite").disabled = !assetSelection;
+    if ($("#multiplySelectedSprite")) $("#multiplySelectedSprite").disabled = !assetSelection;
     if ($("#pasteCopiedSprite")) $("#pasteCopiedSprite").disabled = !copiedAssetSprite;
     if ($("#moveFloatingPaste")) {
       $("#moveFloatingPaste").disabled = !(floatingPasteLayer?.assetId === selectedAssetId);
@@ -2755,6 +2756,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   };
   $("#extractAsset").onclick = extractSelectedAsset;
   if ($("#copySelectedSprite")) $("#copySelectedSprite").onclick = copySelectedSprite;
+  if ($("#multiplySelectedSprite")) $("#multiplySelectedSprite").onclick = multiplySelectedSpriteSheet;
   if ($("#pasteCopiedSprite")) $("#pasteCopiedSprite").onclick = pasteCopiedSprite;
   if ($("#moveFloatingPaste")) $("#moveFloatingPaste").onclick = () => setMoveLayerMode(!assetMoveLayerMode);
   if ($("#warpFloatingPaste")) $("#warpFloatingPaste").onclick = () => setWarpLayerMode(!assetWarpMode);
@@ -2879,6 +2881,55 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     assetSelection = null;
     renderAssets();
     updateSelectionDetails(`Created "${newAsset.name}" (${trimmed.width} x ${trimmed.height}px). Select it from the library to place it.`);
+    markDirty();
+  }
+  function multiplySelectedSpriteSheet() {
+    const sourceAsset = project.assets.find(a => a.id === selectedAssetId);
+    const image = images.get(selectedAssetId);
+    if (!sourceAsset || !image?.naturalWidth || !assetSelection) return;
+    const sprite = makeSelectedSpriteCanvas(image);
+    if (!sprite) return;
+    const columns = clamp(Math.round(Number($("#multiplyColumns")?.value) || 1), 1, 64);
+    const rows = clamp(Math.round(Number($("#multiplyRows")?.value) || 1), 1, 64);
+    if ($("#multiplyColumns")) $("#multiplyColumns").value = columns;
+    if ($("#multiplyRows")) $("#multiplyRows").value = rows;
+    const sheet = document.createElement("canvas");
+    sheet.width = sprite.width * columns;
+    sheet.height = sprite.height * rows;
+    const sheetCtx = sheet.getContext("2d");
+    sheetCtx.imageSmoothingEnabled = false;
+    sheetCtx.clearRect(0, 0, sheet.width, sheet.height);
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < columns; x++) {
+        sheetCtx.drawImage(sprite, x * sprite.width, y * sprite.height);
+      }
+    }
+    const baseName = sourceAsset.name.replace(/\.[^.]+$/, "") || "sprite";
+    const newAsset = {
+      id: uid(),
+      name: `${baseName} ${columns}x${rows} sheet.png`,
+      src: sheet.toDataURL("image/png"),
+      sourceAssetId: sourceAsset.id,
+      category: normalizeAssetCategory(sourceAsset),
+      sheetMeta: {
+        sourceSelection: { x: assetSelection.x, y: assetSelection.y, w: assetSelection.w, h: assetSelection.h },
+        columns,
+        rows,
+        cellWidth: sprite.width,
+        cellHeight: sprite.height,
+        createdAt: Date.now()
+      }
+    };
+    project.assets.push(newAsset);
+    const sheetImage = new Image();
+    sheetImage.onload = refreshAssetViews;
+    sheetImage.src = newAsset.src;
+    images.set(newAsset.id, sheetImage);
+    selectedAssetId = newAsset.id;
+    assetSelection = null;
+    resetAssetWorkspace();
+    renderAssets();
+    updateSelectionDetails(`Created repeated sheet "${newAsset.name}" (${sheet.width} x ${sheet.height}px, ${columns} columns x ${rows} rows).`);
     markDirty();
   }
   function copySelectedSprite() {
