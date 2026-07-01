@@ -356,6 +356,7 @@
             <button id="lassoSelectSprite">Lasso select</button>
             <button id="extractAsset" class="accent" disabled>Save selection to library</button>
             <button id="copySelectedSprite" disabled>Copy selection</button>
+            <button id="extractSelectedLayer" disabled>Extract selection as layer</button>
             <button id="pasteCopiedSprite" disabled>Paste as floating layer</button>
             <button id="moveFloatingPaste" disabled>Move layer</button>
             <button id="warpFloatingPaste" disabled>Warp layer</button>
@@ -643,10 +644,10 @@
         </label>
         <div class="nudge-pad" aria-label="Nudge shoe/end piece">
           <span>Shoe/end arrows</span>
-          <button data-part-nudge="shoe" data-dx="0" data-dy="-1">â†‘</button>
-          <button data-part-nudge="shoe" data-dx="-1" data-dy="0">â†</button>
-          <button data-part-nudge="shoe" data-dx="1" data-dy="0">â†’</button>
-          <button data-part-nudge="shoe" data-dx="0" data-dy="1">â†“</button>
+          <button data-part-nudge="shoe" data-dx="0" data-dy="-1">↑</button>
+          <button data-part-nudge="shoe" data-dx="-1" data-dy="0">←</button>
+          <button data-part-nudge="shoe" data-dx="1" data-dy="0">→</button>
+          <button data-part-nudge="shoe" data-dx="0" data-dy="1">↓</button>
         </div>
         <label>Finger/toe move X <span id="partToeMoveXValue">0px</span>
           <input id="partToeMoveX" type="range" min="-120" max="120" value="0">
@@ -656,10 +657,10 @@
         </label>
         <div class="nudge-pad" aria-label="Nudge finger/toe piece">
           <span>Finger/toe arrows</span>
-          <button data-part-nudge="toe" data-dx="0" data-dy="-1">â†‘</button>
-          <button data-part-nudge="toe" data-dx="-1" data-dy="0">â†</button>
-          <button data-part-nudge="toe" data-dx="1" data-dy="0">â†’</button>
-          <button data-part-nudge="toe" data-dx="0" data-dy="1">â†“</button>
+          <button data-part-nudge="toe" data-dx="0" data-dy="-1">↑</button>
+          <button data-part-nudge="toe" data-dx="-1" data-dy="0">←</button>
+          <button data-part-nudge="toe" data-dx="1" data-dy="0">→</button>
+          <button data-part-nudge="toe" data-dx="0" data-dy="1">↓</button>
         </div>
         <label class="check"><input id="partShowBendGuides" type="checkbox" checked> Show bend/cut markings</label>
         <div class="transform-buttons">

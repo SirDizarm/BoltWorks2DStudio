@@ -1314,6 +1314,7 @@
     $("#extractAsset").disabled = !assetSelection;
     $("#downloadSelectedSprite").disabled = !assetSelection;
     if ($("#copySelectedSprite")) $("#copySelectedSprite").disabled = !assetSelection;
+    if ($("#extractSelectedLayer")) $("#extractSelectedLayer").disabled = !assetSelection;
     if ($("#multiplySelectedSprite")) $("#multiplySelectedSprite").disabled = !assetSelection;
     if ($("#pasteCopiedSprite")) $("#pasteCopiedSprite").disabled = !copiedAssetSprite;
     if ($("#moveFloatingPaste")) {
@@ -1349,8 +1350,14 @@
     }
     if ($("#floatingLayerRotationValue")) $("#floatingLayerRotationValue").textContent = hasFloatingLayer ? `${Math.round(Number(floatingPasteLayer.rotation) || 0)} deg` : "0 deg";
     if ($("#resetFloatingLayerRotation")) $("#resetFloatingLayerRotation").disabled = !hasFloatingLayer;
-    if ($("#pasteFlipX")) $("#pasteFlipX").disabled = !copiedAssetSprite;
-    if ($("#pasteFlipY")) $("#pasteFlipY").disabled = !copiedAssetSprite;
+    if ($("#pasteFlipX")) {
+      $("#pasteFlipX").disabled = !(hasFloatingLayer || copiedAssetSprite);
+      $("#pasteFlipX").checked = hasFloatingLayer ? !!floatingPasteLayer.flipX : !!pasteCopiedFlipX;
+    }
+    if ($("#pasteFlipY")) {
+      $("#pasteFlipY").disabled = !(hasFloatingLayer || copiedAssetSprite);
+      $("#pasteFlipY").checked = hasFloatingLayer ? !!floatingPasteLayer.flipY : !!pasteCopiedFlipY;
+    }
     if ($("#lassoSelectSprite")) $("#lassoSelectSprite").classList.toggle("active", assetLassoMode);
     $("#keepSelectionPixels").disabled = !assetSelection;
     $("#eraseSelectionPixels").disabled = !assetSelection;
@@ -2784,6 +2791,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   };
   $("#extractAsset").onclick = extractSelectedAsset;
   if ($("#copySelectedSprite")) $("#copySelectedSprite").onclick = copySelectedSprite;
+  if ($("#extractSelectedLayer")) $("#extractSelectedLayer").onclick = extractSelectionAsLayer;
   if ($("#multiplySelectedSprite")) $("#multiplySelectedSprite").onclick = multiplySelectedSpriteSheet;
   if ($("#pasteCopiedSprite")) $("#pasteCopiedSprite").onclick = pasteCopiedSprite;
   if ($("#moveFloatingPaste")) $("#moveFloatingPaste").onclick = () => setMoveLayerMode(!assetMoveLayerMode);
@@ -2888,8 +2896,24 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   if ($("#floatingLayerRotation")) $("#floatingLayerRotation").oninput = event => setFloatingLayerRotationDegrees(event.target.value);
   if ($("#floatingLayerRotationExact")) $("#floatingLayerRotationExact").onchange = event => setFloatingLayerRotationDegrees(event.target.value);
   if ($("#resetFloatingLayerRotation")) $("#resetFloatingLayerRotation").onclick = () => setFloatingLayerRotationDegrees(0);
-  if ($("#pasteFlipX")) $("#pasteFlipX").onchange = event => { pasteCopiedFlipX = event.target.checked; };
-  if ($("#pasteFlipY")) $("#pasteFlipY").onchange = event => { pasteCopiedFlipY = event.target.checked; };
+  function setFloatingLayerFlip(axis, checked) {
+    const hasFloatingLayer = floatingPasteLayer?.assetId === selectedAssetId;
+    if (hasFloatingLayer) {
+      if (axis === "x") floatingPasteLayer.flipX = checked;
+      else floatingPasteLayer.flipY = checked;
+      assetSelection = floatingLayerBounds(floatingPasteLayer);
+      drawAssetPreview();
+      renderAssetLayerList();
+      updateSelectionDetails(`${axis === "x" ? "Horizontal" : "Vertical"} flip ${checked ? "enabled" : "disabled"} for selected layer.`);
+      markDirty();
+      return;
+    }
+    if (axis === "x") pasteCopiedFlipX = checked;
+    else pasteCopiedFlipY = checked;
+    updateSelectionDetails(`Next pasted layer will ${checked ? "use" : "not use"} ${axis === "x" ? "horizontal" : "vertical"} flip.`);
+  }
+  if ($("#pasteFlipX")) $("#pasteFlipX").onchange = event => setFloatingLayerFlip("x", event.target.checked);
+  if ($("#pasteFlipY")) $("#pasteFlipY").onchange = event => setFloatingLayerFlip("y", event.target.checked);
   $("#downloadSelectedSprite").onclick = downloadSelectedSprite;
   function makeSelectedSpriteCanvas(image) {
     if (!image?.naturalWidth || !assetSelection) return null;
@@ -3005,6 +3029,103 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     updatePaintControls();
   }
 
+  function clearSelectionFromCanvas(ctx, selection, mode = "inside") {
+    if (!ctx || !selection) return;
+    if (selection.polygon?.length) {
+      ctx.save();
+      ctx.globalCompositeOperation = mode === "outside" ? "destination-in" : "destination-out";
+      drawPolygonPath(ctx, selection.polygon);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+    if (mode === "outside") {
+      const canvas = ctx.canvas;
+      ctx.save();
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.fillRect(0, 0, canvas.width, selection.y);
+      ctx.fillRect(0, selection.y + selection.h, canvas.width, canvas.height - selection.y - selection.h);
+      ctx.fillRect(0, selection.y, selection.x, selection.h);
+      ctx.fillRect(selection.x + selection.w, selection.y, canvas.width - selection.x - selection.w, selection.h);
+      ctx.restore();
+    } else {
+      ctx.clearRect(selection.x, selection.y, selection.w, selection.h);
+    }
+  }
+
+  function extractSelectionAsLayer() {
+    const asset = project.assets.find(a => a.id === selectedAssetId);
+    const image = images.get(selectedAssetId);
+    const rawSelection = assetSelection;
+    const clampedSelection = clampAssetSelection(rawSelection, image);
+    const selection = clampedSelection && rawSelection?.polygon?.length
+      ? { ...clampedSelection, polygon: rawSelection.polygon.map(point => ({ x: point.x, y: point.y })) }
+      : clampedSelection;
+    if (!asset || !image?.naturalWidth || !selection) return;
+    const previousSelection = assetSelection;
+    assetSelection = selection;
+    const canvas = makeSelectedSpriteCanvas(image);
+    assetSelection = previousSelection;
+    if (!canvas) return;
+    pushAssetUndo(asset, "selection extract");
+    const baseCanvas = document.createElement("canvas");
+    baseCanvas.width = image.naturalWidth;
+    baseCanvas.height = image.naturalHeight;
+    const baseCtx = baseCanvas.getContext("2d", { willReadFrequently: true });
+    baseCtx.drawImage(image, 0, 0);
+    clearSelectionFromCanvas(baseCtx, selection, "inside");
+    const source = ensureLayeredSource(asset);
+    const layerImage = new Image();
+    const layer = {
+      id: uid(),
+      assetId: asset.id,
+      name: `Extracted ${asset.name.replace(/\.[^.]+$/, "")}`,
+      src: canvas.toDataURL("image/png"),
+      x: selection.x,
+      y: selection.y,
+      sourceW: canvas.width,
+      sourceH: canvas.height,
+      w: canvas.width,
+      h: canvas.height,
+      scale: 1,
+      sourceAssetId: asset.id,
+      sourceName: asset.name,
+      flipX: false,
+      flipY: false,
+      rotation: 0,
+      visible: true,
+      linked: false,
+      dragging: false
+    };
+    layerImage.onload = () => {
+      setLayerImage(layer, layerImage);
+      source.layers.push(layer);
+      const baseSrc = baseCanvas.toDataURL("image/png");
+      asset.src = baseSrc;
+      asset.name = `${asset.name.replace(/\.[^.]+$/, "")}.png`;
+      asset.backgroundRemoved = { ...(asset.backgroundRemoved || {}), extractedLayer: { x: selection.x, y: selection.y, width: selection.w, height: selection.h, appliedAt: Date.now() } };
+      const replacement = new Image();
+      replacement.onload = refreshAssetViews;
+      replacement.src = baseSrc;
+      images.set(asset.id, replacement);
+      floatingPasteLayer = layer;
+      selectedAssetLayerId = layer.id;
+      assetMoveLayerMode = true;
+      assetWarpMode = false;
+      assetWarpHandle = null;
+      assetSelection = floatingLayerBounds(layer);
+      assetPreviewCache = null;
+      renderAssets();
+      drawAssetPreview();
+      renderAssetLayerList(asset);
+      updateSelectionDetails(`Extracted selected pixels into a movable layer and cleared the source underneath. Use Flip H/V, Move, Warp, Merge, or Cancel.`);
+      renderRig();
+      renderCharacterAnimator();
+      markDirty();
+    };
+    layerImage.src = layer.src;
+  }
   function pasteCopiedSprite() {
     const asset = project.assets.find(a => a.id === selectedAssetId);
     const image = images.get(selectedAssetId);
@@ -3236,31 +3357,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     canvas.height = image.naturalHeight;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     ctx.drawImage(image, 0, 0);
-    if (selection.polygon?.length) {
-      ctx.save();
-      if (mode === "outside") {
-        ctx.globalCompositeOperation = "destination-in";
-        drawPolygonPath(ctx, selection.polygon);
-        ctx.closePath();
-        ctx.fill();
-      } else {
-        ctx.globalCompositeOperation = "destination-out";
-        drawPolygonPath(ctx, selection.polygon);
-        ctx.closePath();
-        ctx.fill();
-      }
-      ctx.restore();
-    } else if (mode === "outside") {
-      ctx.save();
-      ctx.globalCompositeOperation = "destination-out";
-      ctx.fillRect(0, 0, canvas.width, selection.y);
-      ctx.fillRect(0, selection.y + selection.h, canvas.width, canvas.height - selection.y - selection.h);
-      ctx.fillRect(0, selection.y, selection.x, selection.h);
-      ctx.fillRect(selection.x + selection.w, selection.y, canvas.width - selection.x - selection.w, selection.h);
-      ctx.restore();
-    } else {
-      ctx.clearRect(selection.x, selection.y, selection.w, selection.h);
-    }
+    clearSelectionFromCanvas(ctx, selection, mode);
     const src = canvas.toDataURL("image/png");
     asset.src = src;
     asset.name = `${asset.name.replace(/\.[^.]+$/, "")}.png`;
