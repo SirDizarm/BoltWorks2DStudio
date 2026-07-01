@@ -151,6 +151,7 @@ button.danger { color: #ffc2b9; border-color: #6b3932; }
 .asset-workbench { width: 100%; max-width: 100%; min-width: 0; min-height: 0; overflow: hidden auto; overflow-anchor: none; display: grid; place-items: start center; padding: 24px; background: radial-gradient(circle at center, #1e241d 0, #10130f 68%); }
 .asset-studio-empty { display: flex; flex-direction: column; align-items: center; gap: 5px; color: var(--muted); }
 .asset-studio-empty strong { color: var(--ink); font-size: 18px; }
+.empty-state-actions { display: flex; gap: 8px; margin-top: 10px; }
 #assetEditor { width: 100%; max-width: 1200px; min-width: 0; overflow: hidden; }
 .extract-toolbar, .transparency-tools { display: flex; align-items: center; gap: 9px; padding: 9px 11px; border: 1px solid var(--line); background: #171b16; }
 .extract-toolbar { border-radius: 8px 8px 0 0; }

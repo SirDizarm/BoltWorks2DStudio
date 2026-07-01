@@ -2865,6 +2865,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   };
   if ($("#downloadLayeredAsset")) $("#downloadLayeredAsset").onclick = downloadLayeredAssetFile;
   if ($("#loadLayeredAsset")) $("#loadLayeredAsset").onclick = () => $("#layeredAssetFile")?.click();
+  if ($("#loadLayeredAssetEmpty")) $("#loadLayeredAssetEmpty").onclick = () => $("#layeredAssetFile")?.click();
   if ($("#layeredAssetFile")) $("#layeredAssetFile").onchange = loadLayeredAssetFile;
   function setFloatingLayerScalePercent(value) {
     if (!(floatingPasteLayer?.assetId === selectedAssetId)) return;
@@ -3288,11 +3289,37 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     updateSelectionDetails(`Saved layered work file for "${asset.name}" with ${payload.layers.length} editable layer${payload.layers.length === 1 ? "" : "s"}.`);
   }
 
+  function transparentAssetCanvasSrc(width, height) {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(Number(width) || 640));
+    canvas.height = Math.max(1, Math.round(Number(height) || 360));
+    return canvas.toDataURL("image/png");
+  }
+
+  function createAssetFromLayeredPayload(payload, fallbackName = "layered-asset.boltasset") {
+    const assetMeta = payload.asset || {};
+    const baseSrc = assetMeta.baseSrc || transparentAssetCanvasSrc(assetMeta.width, assetMeta.height);
+    const asset = {
+      id: uid(),
+      name: assetMeta.name || fallbackName.replace(/\.(boltasset|json)$/i, ".png") || "layered-asset.png",
+      src: baseSrc,
+      category: assetCategories.includes(assetMeta.category) ? assetMeta.category : "working",
+      backgroundRemoved: assetMeta.backgroundRemoved || undefined
+    };
+    project.assets.push(asset);
+    selectedAssetId = asset.id;
+    resetAssetWorkspace();
+    const image = new Image();
+    image.onload = refreshAssetViews;
+    image.src = asset.src;
+    images.set(asset.id, image);
+    return asset;
+  }
+
   function loadLayeredAssetFile(event) {
     const file = event.target.files?.[0];
     event.target.value = "";
-    const asset = project.assets.find(a => a.id === selectedAssetId);
-    if (!file || !asset) return;
+    if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       try {
@@ -3301,15 +3328,23 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
           alert("That is not a valid BoltWorks layered asset file.");
           return;
         }
-        const replaceBase = payload.asset?.baseSrc && confirm("Load the flat base PNG from this layered file too?\n\nCancel keeps the currently selected base image and only loads the editable layers.");
-        if (replaceBase) {
-          asset.src = payload.asset.baseSrc;
-          asset.name = payload.asset.name || asset.name;
-          asset.category = assetCategories.includes(payload.asset.category) ? payload.asset.category : normalizeAssetCategory(asset);
-          const replacement = new Image();
-          replacement.onload = refreshAssetViews;
-          replacement.src = asset.src;
-          images.set(asset.id, replacement);
+        let asset = project.assets.find(a => a.id === selectedAssetId);
+        let createdNewAsset = false;
+        if (!asset) {
+          asset = createAssetFromLayeredPayload(payload, file.name);
+          createdNewAsset = true;
+        } else {
+          const replaceBase = !!payload.asset?.baseSrc && confirm("Load the flat base PNG from this layered file too?\n\nCancel keeps the currently selected base image and only loads the editable layers.");
+          if (replaceBase) {
+            asset.src = payload.asset.baseSrc;
+            asset.name = payload.asset.name || asset.name;
+            asset.category = assetCategories.includes(payload.asset.category) ? payload.asset.category : normalizeAssetCategory(asset);
+            asset.backgroundRemoved = payload.asset.backgroundRemoved || asset.backgroundRemoved;
+            const replacement = new Image();
+            replacement.onload = refreshAssetViews;
+            replacement.src = asset.src;
+            images.set(asset.id, replacement);
+          }
         }
         asset.layeredSource = {
           version: 1,
@@ -3329,10 +3364,11 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
         floatingPasteLayer = asset.layeredSource.layers.find(layer => layer.id === selectedAssetLayerId) || null;
         assetMoveLayerMode = !!floatingPasteLayer;
         assetWarpMode = false;
+        assetWarpHandle = null;
         assetPreviewCache = null;
         renderAssets();
         renderAssetEditor();
-        updateSelectionDetails(`Loaded ${asset.layeredSource.layers.length} editable layer${asset.layeredSource.layers.length === 1 ? "" : "s"} into "${asset.name}".`);
+        updateSelectionDetails(`${createdNewAsset ? "Imported" : "Loaded"} ${asset.layeredSource.layers.length} editable layer${asset.layeredSource.layers.length === 1 ? "" : "s"} into "${asset.name}".`);
         markDirty();
       } catch (error) {
         alert(`Could not load layered asset file: ${error.message}`);
