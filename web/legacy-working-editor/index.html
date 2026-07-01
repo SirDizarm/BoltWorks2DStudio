@@ -594,6 +594,14 @@
         <label>Layer light exact %<input id="partBrightnessNumber" type="number" min="20" max="200" step="1" value="100"></label>
         <button id="partBrightnessReset" class="full quiet">Reset layer light</button>
         <label class="check"><input id="partFlip" type="checkbox"> Flip this body part</label>
+        <h2>Sprite sheet cell</h2>
+        <p class="hint">Use this when one image contains several heads/arms/etc. Only the selected cell is drawn; the other cells stay hidden.</p>
+        <div class="field-row">
+          <label>Columns<input id="partSheetColumns" type="number" min="1" max="64" step="1" value="1"></label>
+          <label>Rows<input id="partSheetRows" type="number" min="1" max="64" step="1" value="1"></label>
+        </div>
+        <label>Cell <span id="partSheetCellValue">1 / 1</span><input id="partSheetCell" type="range" min="1" max="1" value="1"></label>
+        <label>Cell exact<input id="partSheetCellNumber" type="number" min="1" max="1" step="1" value="1"></label>
         <h2>Hand / foot bend</h2>
         <p class="hint">Optional per-frame bend for hands, wrists, shoes, toes, or any end-piece touching/pushing against something. The selected part shows cut guides: yellow = main bend, red = toe/finger tip. Move them with the zone sliders below.</p>
         <label class="check"><input id="partBendEnabled" type="checkbox"> Bend end part of this layer</label>

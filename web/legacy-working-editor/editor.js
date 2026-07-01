@@ -335,7 +335,7 @@
     };
     const parts = {};
     bodyParts.forEach(part => {
-      parts[part] = { assetId: rig[part] || null, ...defaults[part], scale: 1, flip: false, bendEnabled: false, bend: 0, bendZone: 25, toeBendEnabled: false, toeBend: 0, toeBendZone: 12, toeSlide: 0, toeMoveX: 0, toeMoveY: 0, shoeMoveX: 0, shoeMoveY: 0, showBendGuides: true, toeCutAxis: "same", bendAxis: "bottom" };
+      parts[part] = { assetId: rig[part] || null, ...defaults[part], scale: 1, flip: false, sheetColumns: 1, sheetRows: 1, sheetCell: 1, bendEnabled: false, bend: 0, bendZone: 25, toeBendEnabled: false, toeBend: 0, toeBendZone: 12, toeSlide: 0, toeMoveX: 0, toeMoveY: 0, shoeMoveX: 0, shoeMoveY: 0, showBendGuides: true, toeCutAxis: "same", bendAxis: "bottom" };
     });
     return { parts };
   }
@@ -422,6 +422,9 @@
         const parts = {};
         bodyParts.forEach(part => {
           parts[part] = { ...fallback.parts[part], ...(frame.parts?.[part] || {}) };
+          parts[part].sheetColumns = clamp(Math.round(Number(parts[part].sheetColumns) || 1), 1, 64);
+          parts[part].sheetRows = clamp(Math.round(Number(parts[part].sheetRows) || 1), 1, 64);
+          parts[part].sheetCell = clamp(Math.round(Number(parts[part].sheetCell) || 1), 1, parts[part].sheetColumns * parts[part].sheetRows);
         });
         return { parts };
       });
@@ -3469,7 +3472,11 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
         const mainAssetId = standing.parts?.[part]?.assetId || project.rig?.[part] || null;
         if (!mainAssetId) return;
         if (force || !frame.parts[part].assetId || isLikelySourceSheetAsset(frame.parts[part].assetId)) {
+          const standingPart = standing.parts?.[part] || {};
           frame.parts[part].assetId = mainAssetId;
+          frame.parts[part].sheetColumns = standingPart.sheetColumns || 1;
+          frame.parts[part].sheetRows = standingPart.sheetRows || 1;
+          frame.parts[part].sheetCell = standingPart.sheetCell || 1;
           changed = true;
         }
       });
@@ -3486,11 +3493,15 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   }
 
   function propagateMainAssetToAnimations(part, assetId) {
+    const standingPart = standingCharacterFrame()?.parts?.[part] || {};
     animationStates.forEach(state => {
       (project.character?.animations?.[state] || []).forEach(frame => {
         if (!frame.parts?.[part]) return;
         if (state === "standing" || assetId || !frame.parts[part].assetId || isLikelySourceSheetAsset(frame.parts[part].assetId)) {
           frame.parts[part].assetId = assetId;
+          frame.parts[part].sheetColumns = standingPart.sheetColumns || 1;
+          frame.parts[part].sheetRows = standingPart.sheetRows || 1;
+          frame.parts[part].sheetCell = standingPart.sheetCell || 1;
         }
       });
     });
@@ -3538,14 +3549,14 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   function characterDefaultPose(part, assetId = null) {
     const center = project.character.width / 2;
     const defaults = {
-      backArm: { x: center - 30, y: 150, rotation: 4, scale: 1, flip: false, bendEnabled: false, bend: 0, bendZone: 25, toeBendEnabled: false, toeBend: 0, toeBendZone: 12, toeSlide: 0, toeMoveX: 0, toeMoveY: 0, shoeMoveX: 0, shoeMoveY: 0, showBendGuides: true, toeCutAxis: "same", bendAxis: "bottom" },
-      backLeg: { x: center - 12, y: 218, rotation: 0, scale: 1, flip: false, bendEnabled: false, bend: 0, bendZone: 25, toeBendEnabled: false, toeBend: 0, toeBendZone: 12, toeSlide: 0, toeMoveX: 0, toeMoveY: 0, shoeMoveX: 0, shoeMoveY: 0, showBendGuides: true, toeCutAxis: "same", bendAxis: "bottom" },
-      torso: { x: center, y: 172, rotation: 0, scale: 1, flip: false, bendEnabled: false, bend: 0, bendZone: 25, toeBendEnabled: false, toeBend: 0, toeBendZone: 12, toeSlide: 0, toeMoveX: 0, toeMoveY: 0, shoeMoveX: 0, shoeMoveY: 0, showBendGuides: true, toeCutAxis: "same", bendAxis: "bottom" },
-      head: { x: center, y: 96, rotation: 0, scale: 1, flip: false, bendEnabled: false, bend: 0, bendZone: 25, toeBendEnabled: false, toeBend: 0, toeBendZone: 12, toeSlide: 0, toeMoveX: 0, toeMoveY: 0, shoeMoveX: 0, shoeMoveY: 0, showBendGuides: true, toeCutAxis: "same", bendAxis: "bottom" },
-      frontLeg: { x: center + 12, y: 218, rotation: 0, scale: 1, flip: false, bendEnabled: false, bend: 0, bendZone: 25, toeBendEnabled: false, toeBend: 0, toeBendZone: 12, toeSlide: 0, toeMoveX: 0, toeMoveY: 0, shoeMoveX: 0, shoeMoveY: 0, showBendGuides: true, toeCutAxis: "same", bendAxis: "bottom" },
-      frontArm: { x: center + 30, y: 150, rotation: -4, scale: 1, flip: false, bendEnabled: false, bend: 0, bendZone: 25, toeBendEnabled: false, toeBend: 0, toeBendZone: 12, toeSlide: 0, toeMoveX: 0, toeMoveY: 0, shoeMoveX: 0, shoeMoveY: 0, showBendGuides: true, toeCutAxis: "same", bendAxis: "bottom" }
+      backArm: { x: center - 30, y: 150, rotation: 4, scale: 1, flip: false, sheetColumns: 1, sheetRows: 1, sheetCell: 1, bendEnabled: false, bend: 0, bendZone: 25, toeBendEnabled: false, toeBend: 0, toeBendZone: 12, toeSlide: 0, toeMoveX: 0, toeMoveY: 0, shoeMoveX: 0, shoeMoveY: 0, showBendGuides: true, toeCutAxis: "same", bendAxis: "bottom" },
+      backLeg: { x: center - 12, y: 218, rotation: 0, scale: 1, flip: false, sheetColumns: 1, sheetRows: 1, sheetCell: 1, bendEnabled: false, bend: 0, bendZone: 25, toeBendEnabled: false, toeBend: 0, toeBendZone: 12, toeSlide: 0, toeMoveX: 0, toeMoveY: 0, shoeMoveX: 0, shoeMoveY: 0, showBendGuides: true, toeCutAxis: "same", bendAxis: "bottom" },
+      torso: { x: center, y: 172, rotation: 0, scale: 1, flip: false, sheetColumns: 1, sheetRows: 1, sheetCell: 1, bendEnabled: false, bend: 0, bendZone: 25, toeBendEnabled: false, toeBend: 0, toeBendZone: 12, toeSlide: 0, toeMoveX: 0, toeMoveY: 0, shoeMoveX: 0, shoeMoveY: 0, showBendGuides: true, toeCutAxis: "same", bendAxis: "bottom" },
+      head: { x: center, y: 96, rotation: 0, scale: 1, flip: false, sheetColumns: 1, sheetRows: 1, sheetCell: 1, bendEnabled: false, bend: 0, bendZone: 25, toeBendEnabled: false, toeBend: 0, toeBendZone: 12, toeSlide: 0, toeMoveX: 0, toeMoveY: 0, shoeMoveX: 0, shoeMoveY: 0, showBendGuides: true, toeCutAxis: "same", bendAxis: "bottom" },
+      frontLeg: { x: center + 12, y: 218, rotation: 0, scale: 1, flip: false, sheetColumns: 1, sheetRows: 1, sheetCell: 1, bendEnabled: false, bend: 0, bendZone: 25, toeBendEnabled: false, toeBend: 0, toeBendZone: 12, toeSlide: 0, toeMoveX: 0, toeMoveY: 0, shoeMoveX: 0, shoeMoveY: 0, showBendGuides: true, toeCutAxis: "same", bendAxis: "bottom" },
+      frontArm: { x: center + 30, y: 150, rotation: -4, scale: 1, flip: false, sheetColumns: 1, sheetRows: 1, sheetCell: 1, bendEnabled: false, bend: 0, bendZone: 25, toeBendEnabled: false, toeBend: 0, toeBendZone: 12, toeSlide: 0, toeMoveX: 0, toeMoveY: 0, shoeMoveX: 0, shoeMoveY: 0, showBendGuides: true, toeCutAxis: "same", bendAxis: "bottom" }
     };
-    return { assetId, ...(defaults[part] || { x: center, y: 160, rotation: 0, scale: 1, flip: false, bendEnabled: false, bend: 0, bendZone: 25, toeBendEnabled: false, toeBend: 0, toeBendZone: 12, toeSlide: 0, toeMoveX: 0, toeMoveY: 0, shoeMoveX: 0, shoeMoveY: 0, showBendGuides: true, toeCutAxis: "same", bendAxis: "bottom" }) };
+    return { assetId, ...(defaults[part] || { x: center, y: 160, rotation: 0, scale: 1, flip: false, sheetColumns: 1, sheetRows: 1, sheetCell: 1, bendEnabled: false, bend: 0, bendZone: 25, toeBendEnabled: false, toeBend: 0, toeBendZone: 12, toeSlide: 0, toeMoveX: 0, toeMoveY: 0, shoeMoveX: 0, shoeMoveY: 0, showBendGuides: true, toeCutAxis: "same", bendAxis: "bottom" }) };
   }
 
   function isLikelySourceSheetAsset(assetId) {
@@ -3660,6 +3671,8 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       if ($("#partRotationValue")) $("#partRotationValue").textContent = "-";
       if ($("#partScaleValue")) $("#partScaleValue").textContent = "-";
       if ($("#partFlip")) $("#partFlip").checked = false;
+      ["partSheetColumns", "partSheetRows", "partSheetCell", "partSheetCellNumber"].forEach(id => { if ($(`#${id}`)) $(`#${id}`).value = id.includes("Columns") || id.includes("Rows") ? 1 : ""; });
+      if ($("#partSheetCellValue")) $("#partSheetCellValue").textContent = "-";
       renderPartLayerOrder();
       renderPartLockList();
       return;
@@ -3674,6 +3687,24 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     $("#partScaleNumber").value = Math.round((transform.scale || 1) * 100);
     $("#partScaleValue").textContent = `${Math.round((transform.scale || 1) * 100)}%`;
     $("#partFlip").checked = !!transform.flip;
+    const sheetColumns = clamp(Math.round(Number(transform.sheetColumns) || 1), 1, 64);
+    const sheetRows = clamp(Math.round(Number(transform.sheetRows) || 1), 1, 64);
+    const sheetTotal = Math.max(1, sheetColumns * sheetRows);
+    const sheetCell = clamp(Math.round(Number(transform.sheetCell) || 1), 1, sheetTotal);
+    transform.sheetColumns = sheetColumns;
+    transform.sheetRows = sheetRows;
+    transform.sheetCell = sheetCell;
+    if ($("#partSheetColumns")) $("#partSheetColumns").value = sheetColumns;
+    if ($("#partSheetRows")) $("#partSheetRows").value = sheetRows;
+    if ($("#partSheetCell")) {
+      $("#partSheetCell").max = sheetTotal;
+      $("#partSheetCell").value = sheetCell;
+    }
+    if ($("#partSheetCellNumber")) {
+      $("#partSheetCellNumber").max = sheetTotal;
+      $("#partSheetCellNumber").value = sheetCell;
+    }
+    if ($("#partSheetCellValue")) $("#partSheetCellValue").textContent = `${sheetCell} / ${sheetTotal}`;
     if ($("#partBendEnabled")) $("#partBendEnabled").checked = !!transform.bendEnabled;
     if ($("#partBendAxis")) $("#partBendAxis").value = ["bottom", "left", "right"].includes(transform.bendAxis) ? transform.bendAxis : "bottom";
     if ($("#partBend")) $("#partBend").value = Math.round(transform.bend || 0);
@@ -3734,9 +3765,41 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     `).join("");
   }
 
+  function characterSheetSourceRect(image, transform = {}) {
+    const columns = clamp(Math.round(Number(transform.sheetColumns) || 1), 1, 64);
+    const rows = clamp(Math.round(Number(transform.sheetRows) || 1), 1, 64);
+    const total = Math.max(1, columns * rows);
+    const cell = clamp(Math.round(Number(transform.sheetCell) || 1), 1, total) - 1;
+    const sourceW = image?.naturalWidth || image?.width || 1;
+    const sourceH = image?.naturalHeight || image?.height || 1;
+    const cellW = Math.max(1, Math.floor(sourceW / columns));
+    const cellH = Math.max(1, Math.floor(sourceH / rows));
+    const col = cell % columns;
+    const row = Math.floor(cell / columns);
+    return { x: col * cellW, y: row * cellH, w: cellW, h: cellH, columns, rows, cell: cell + 1, total };
+  }
+
+  function characterPartSourceImage(image, transform = {}) {
+    const rect = characterSheetSourceRect(image, transform);
+    if (rect.columns === 1 && rect.rows === 1) return image;
+    const canvas = document.createElement("canvas");
+    canvas.width = rect.w;
+    canvas.height = rect.h;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, rect.w, rect.h);
+    ctx.drawImage(image, rect.x, rect.y, rect.w, rect.h, 0, 0, rect.w, rect.h);
+    Object.defineProperty(canvas, "naturalWidth", { value: rect.w, configurable: true });
+    Object.defineProperty(canvas, "naturalHeight", { value: rect.h, configurable: true });
+    return canvas;
+  }
+
   function characterPartSize(part, transform) {
     const image = images.get(transform.assetId);
-    if (image?.naturalWidth) return { width: image.naturalWidth * (transform.scale || 1), height: image.naturalHeight * (transform.scale || 1) };
+    if (image?.naturalWidth) {
+      const rect = characterSheetSourceRect(image, transform);
+      return { width: rect.w * (transform.scale || 1), height: rect.h * (transform.scale || 1) };
+    }
     const fallback = part === "head" ? [54, 58] : part === "torso" ? [68, 94] : [30, 90];
     return { width: fallback[0] * (transform.scale || 1), height: fallback[1] * (transform.scale || 1) };
   }
@@ -3932,8 +3995,9 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       ctx.rotate((transform.rotation || 0) * Math.PI / 180);
       ctx.scale(transform.flip ? -1 : 1, 1);
       const anchor = characterPartAnchor(part, size);
-      if (image?.naturalWidth && !isLikelySourceSheetAsset(transform.assetId)) {
-        drawBendableCharacterImage(ctx, image, anchor, size, transform);
+      const usesExplicitCell = (Number(transform.sheetColumns) || 1) * (Number(transform.sheetRows) || 1) > 1;
+      if (image?.naturalWidth && (usesExplicitCell || !isLikelySourceSheetAsset(transform.assetId))) {
+        drawBendableCharacterImage(ctx, characterPartSourceImage(image, transform), anchor, size, transform);
       } else {
         drawCharacterPlaceholder(ctx, part, size);
       }
@@ -4257,6 +4321,12 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   function defaultCharacterTransform(part, assetId) {
     return characterDefaultPose(part, assetId);
   }
+  function applyCharacterAssetSheetDefaults(transform, asset) {
+    if (!transform || !asset?.sheetMeta) return;
+    transform.sheetColumns = clamp(Math.round(Number(asset.sheetMeta.columns) || 1), 1, 64);
+    transform.sheetRows = clamp(Math.round(Number(asset.sheetMeta.rows) || 1), 1, 64);
+    transform.sheetCell = clamp(Math.round(Number(transform.sheetCell) || 1), 1, Math.max(1, transform.sheetColumns * transform.sheetRows));
+  }
   function assignAssetToCharacterPart(assetId, resetPlacement = false) {
     const assignedAsset = project.assets.find(asset => asset.id === assetId);
     if (assignedAsset) assignedAsset.category = "character";
@@ -4265,6 +4335,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     frames.forEach(frame => {
       if (resetPlacement) frame.parts[selectedCharacterPart] = defaultCharacterTransform(selectedCharacterPart, assetId);
       else frame.parts[selectedCharacterPart].assetId = assetId;
+      applyCharacterAssetSheetDefaults(frame.parts[selectedCharacterPart], assignedAsset);
     });
     project.rig[selectedCharacterPart] = assetId;
     if (characterState === "standing") propagateMainAssetToAnimations(selectedCharacterPart, assetId);
@@ -4369,6 +4440,23 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       renderCharacterTransforms(); drawCharacterPreview(); markDirty();
     };
   });
+  function setCharacterSheetValue(key, value) {
+    const transform = currentCharacterTransform();
+    if (!transform) return;
+    pushCharacterUndo(`${prettyPart[selectedCharacterPart]} sheet cell`);
+    if (key === "sheetColumns") transform.sheetColumns = clamp(Math.round(Number(value) || 1), 1, 64);
+    if (key === "sheetRows") transform.sheetRows = clamp(Math.round(Number(value) || 1), 1, 64);
+    const total = Math.max(1, (Number(transform.sheetColumns) || 1) * (Number(transform.sheetRows) || 1));
+    if (key === "sheetCell") transform.sheetCell = clamp(Math.round(Number(value) || 1), 1, total);
+    else transform.sheetCell = clamp(Math.round(Number(transform.sheetCell) || 1), 1, total);
+    renderCharacterTransforms();
+    drawCharacterPreview();
+    markDirty();
+  }
+  if ($("#partSheetColumns")) $("#partSheetColumns").onchange = event => setCharacterSheetValue("sheetColumns", event.target.value);
+  if ($("#partSheetRows")) $("#partSheetRows").onchange = event => setCharacterSheetValue("sheetRows", event.target.value);
+  if ($("#partSheetCell")) $("#partSheetCell").oninput = event => setCharacterSheetValue("sheetCell", event.target.value);
+  if ($("#partSheetCellNumber")) $("#partSheetCellNumber").onchange = event => setCharacterSheetValue("sheetCell", event.target.value);
   if ($("#partBendEnabled")) $("#partBendEnabled").onchange = event => {
     pushCharacterUndo(`${prettyPart[selectedCharacterPart]} bend toggle`);
     const transform = currentCharacterTransform();
@@ -4518,6 +4606,9 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       rotation: Number(transform.rotation) || 0,
       scale: Number(transform.scale) || 1,
       flip: !!transform.flip,
+      sheetColumns: clamp(Math.round(Number(transform.sheetColumns) || 1), 1, 64),
+      sheetRows: clamp(Math.round(Number(transform.sheetRows) || 1), 1, 64),
+      sheetCell: clamp(Math.round(Number(transform.sheetCell) || 1), 1, Math.max(1, (Number(transform.sheetColumns) || 1) * (Number(transform.sheetRows) || 1))),
       bendEnabled: !!transform.bendEnabled,
       bend: Number(transform.bend) || 0,
       bendZone: Number(transform.bendZone) || 25,
@@ -4545,6 +4636,9 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       rotation: characterTransformClipboard.rotation,
       scale: characterTransformClipboard.scale,
       flip: characterTransformClipboard.flip,
+      sheetColumns: clamp(Math.round(Number(characterTransformClipboard.sheetColumns) || 1), 1, 64),
+      sheetRows: clamp(Math.round(Number(characterTransformClipboard.sheetRows) || 1), 1, 64),
+      sheetCell: clamp(Math.round(Number(characterTransformClipboard.sheetCell) || 1), 1, Math.max(1, (Number(characterTransformClipboard.sheetColumns) || 1) * (Number(characterTransformClipboard.sheetRows) || 1))),
       bendEnabled: !!characterTransformClipboard.bendEnabled,
       bend: Number(characterTransformClipboard.bend) || 0,
       bendZone: Number(characterTransformClipboard.bendZone) || 25,
