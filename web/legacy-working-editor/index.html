@@ -376,8 +376,10 @@
               <label>Layer rotation <span id="floatingLayerRotationValue">0 deg</span><input id="floatingLayerRotation" type="range" min="-180" max="180" value="0" disabled></label>
               <input id="floatingLayerRotationExact" type="number" min="-180" max="180" step="1" value="0" disabled>
               <button id="resetFloatingLayerRotation" disabled>Reset rotation</button>
-              <label class="check"><input id="pasteFlipX" type="checkbox" disabled> Flip H</label>
-              <label class="check"><input id="pasteFlipY" type="checkbox" disabled> Flip V</label>
+              <div class="floating-layer-flips">
+                <label class="check"><input id="pasteFlipX" type="checkbox" disabled> Flip H</label>
+                <label class="check"><input id="pasteFlipY" type="checkbox" disabled> Flip V</label>
+              </div>
             </div>
             <div class="warp-layer-tools">
               <strong>Warp / puppet draft</strong>

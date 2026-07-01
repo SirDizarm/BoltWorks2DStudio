@@ -1085,8 +1085,14 @@
     summary.textContent = layers.length ? `${layers.length} editable layer${layers.length === 1 ? "" : "s"}` : "Flat PNG only";
     list.innerHTML = layers.length ? layers.map((layer, index) => `
       <div class="asset-layer-row ${layer.id === selectedAssetLayerId ? "selected" : ""} ${layer.visible === false ? "hidden-item" : ""}" data-layer-id="${layer.id}">
-        <button class="asset-layer-pick" title="Select this layer">${index + 1}</button>
-        <span><strong>${escapeHtml(layer.name)}</strong><small>${Math.round(layer.x)}, ${Math.round(layer.y)} - ${Math.round(layer.w)} x ${Math.round(layer.h)}</small></span>
+        <button class="asset-layer-pick" title="Select this layer. Lower numbers draw behind higher numbers.">${index + 1}</button>
+        <span><strong>${escapeHtml(layer.name)}</strong><small>${Math.round(layer.x)}, ${Math.round(layer.y)} - ${Math.round(layer.w)} x ${Math.round(layer.h)} - ${index === 0 ? "bottom" : index === layers.length - 1 ? "top" : "middle"}</small></span>
+        <div class="asset-layer-order" title="Change draw order: bottom draws first, top draws last">
+          <button class="asset-layer-bottom" title="Send to bottom / behind all layers" ${index === 0 ? "disabled" : ""}>bot</button>
+          <button class="asset-layer-down" title="Move one step backward" ${index === 0 ? "disabled" : ""}>dn</button>
+          <button class="asset-layer-up" title="Move one step forward" ${index === layers.length - 1 ? "disabled" : ""}>up</button>
+          <button class="asset-layer-top" title="Bring to top / above all layers" ${index === layers.length - 1 ? "disabled" : ""}>top</button>
+        </div>
         <button class="asset-layer-hide" title="${layer.visible === false ? "Show" : "Hide"}">${layer.visible === false ? "show" : "hide"}</button>
         <button class="asset-layer-link" title="Link/move with other linked layers">${layer.linked ? "linked" : "link"}</button>
         <button class="asset-layer-delete danger" title="Remove this editable layer">X</button>
@@ -2786,12 +2792,39 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   if ($("#mergeFloatingPaste")) $("#mergeFloatingPaste").onclick = mergeFloatingPasteLayer;
   if ($("#cancelFloatingPaste")) $("#cancelFloatingPaste").onclick = cancelFloatingPasteLayer;
   if ($("#undoAssetEdit")) $("#undoAssetEdit").onclick = restoreLastAssetUndo;
+  function moveAssetLayer(layerId, action) {
+    const asset = project.assets.find(a => a.id === selectedAssetId);
+    const layers = asset ? hydrateAssetLayers(asset) : [];
+    const from = layers.findIndex(item => item.id === layerId);
+    if (!asset || from < 0) return;
+    let to = from;
+    if (action === "up") to = Math.min(layers.length - 1, from + 1);
+    if (action === "down") to = Math.max(0, from - 1);
+    if (action === "top") to = layers.length - 1;
+    if (action === "bottom") to = 0;
+    if (to === from) return;
+    const [layer] = layers.splice(from, 1);
+    layers.splice(to, 0, layer);
+    selectedAssetLayerId = layer.id;
+    floatingPasteLayer = layer;
+    assetMoveLayerMode = true;
+    assetWarpMode = false;
+    assetWarpHandle = null;
+    drawAssetPreview();
+    renderAssetLayerList(asset);
+    updateSelectionDetails(`Moved layer "${layer.name}" ${action}. Bottom draws behind, top draws in front.`);
+    markDirty();
+  }
   if ($("#assetLayerList")) $("#assetLayerList").onclick = event => {
     const row = event.target.closest(".asset-layer-row");
     if (!row) return;
     const asset = project.assets.find(a => a.id === selectedAssetId);
     const layer = hydrateAssetLayers(asset).find(item => item.id === row.dataset.layerId);
     if (!asset || !layer) return;
+    if (event.target.closest(".asset-layer-top")) { moveAssetLayer(layer.id, "top"); return; }
+    if (event.target.closest(".asset-layer-up")) { moveAssetLayer(layer.id, "up"); return; }
+    if (event.target.closest(".asset-layer-down")) { moveAssetLayer(layer.id, "down"); return; }
+    if (event.target.closest(".asset-layer-bottom")) { moveAssetLayer(layer.id, "bottom"); return; }
     if (event.target.closest(".asset-layer-hide")) {
       layer.visible = layer.visible === false;
       drawAssetPreview();
