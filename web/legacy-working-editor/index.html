@@ -330,6 +330,19 @@
           <span>Choose an asset on the left, or import a new image.</span>
         </div>
         <div id="assetEditor" hidden>
+          <div class="asset-canvas-column">
+            <div class="asset-preview-scroll">
+              <div class="asset-preview-wrap"><canvas id="assetPreview" width="1" height="1"></canvas></div>
+            </div>
+            <div class="extract-toolbar">
+              <label>Zoom <span id="assetZoomValue">50%</span>
+                <input id="assetZoom" type="range" min="10" max="1600" value="50" step="10">
+              </label>
+              <button id="fitAsset">Fit sheet</button>
+              <button id="clearAssetSelection">Clear selection</button>
+            </div>
+          </div>
+          <aside class="asset-tool-rail">
           <div class="sprite-selection-actions">
             <strong>Selected sprite</strong>
             <span id="selectionDetails" class="selection-details">No sprite selected yet.</span>
@@ -403,16 +416,6 @@
               <button id="paintDiscard" class="danger" disabled>Discard paint changes</button>
             </div>
           </div>
-          <div class="asset-preview-scroll">
-            <div class="asset-preview-wrap"><canvas id="assetPreview" width="1" height="1"></canvas></div>
-          </div>
-          <div class="extract-toolbar">
-            <label>Zoom <span id="assetZoomValue">50%</span>
-              <input id="assetZoom" type="range" min="10" max="1600" value="50" step="10">
-            </label>
-            <button id="fitAsset">Fit sheet</button>
-            <button id="clearAssetSelection">Clear selection</button>
-          </div>
           <div class="transparency-tools">
             <label class="check"><input id="transparentBackground" type="checkbox" checked> Preview background removal</label>
             <button id="pickBackground">Pick background color</button>
@@ -454,6 +457,7 @@
               <button id="deleteAsset" class="danger">Delete this asset from project</button>
             </div>
           </div>
+          </aside>
         </div>
       </main>
     </div>
