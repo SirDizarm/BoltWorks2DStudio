@@ -4099,6 +4099,92 @@
         pushTri(a, c, d);
       };
       const v = (x, y, z, u, vv) => ({ p: point(x, y, z), uv: [u, vv] });
+      const polishLevel = Math.max(0, smoothPasses - 2);
+      const maxPatchSpan = polishLevel > 0 ? Math.max(2, 8 - polishLevel) : Infinity;
+      const mix = (a, b, t) => a + (b - a) * t;
+      const mixArray = (a, b, t) => a.map((value, index) => mix(value, b[index], t));
+      const mixVertex = (a, b, t) => ({ p: mixArray(a.p, b.p, t), uv: mixArray(a.uv, b.uv, t) });
+      const patchVertex = (a, b, c, d, u, vv) => {
+        const top = mixVertex(a, b, u);
+        const bottom = mixVertex(d, c, u);
+        return mixVertex(top, bottom, vv);
+      };
+      const pushQuadPatch = (a, b, c, d, stepsU = 1, stepsV = 1) => {
+        const uSteps = Math.max(1, Math.round(stepsU));
+        const vSteps = Math.max(1, Math.round(stepsV));
+        if (uSteps === 1 && vSteps === 1) {
+          pushQuad(a, b, c, d);
+          return;
+        }
+        for (let py = 0; py < vSteps; py++) {
+          const v0 = py / vSteps;
+          const v1 = (py + 1) / vSteps;
+          for (let px = 0; px < uSteps; px++) {
+            const u0 = px / uSteps;
+            const u1 = (px + 1) / uSteps;
+            pushQuad(
+              patchVertex(a, b, c, d, u0, v0),
+              patchVertex(a, b, c, d, u1, v0),
+              patchVertex(a, b, c, d, u1, v1),
+              patchVertex(a, b, c, d, u0, v1)
+            );
+          }
+        }
+      };
+      const relaxWeldedPositions = (iterations, strength) => {
+        if (positions.length < 9 || iterations <= 0 || strength <= 0) return;
+        const vertices = [];
+        const faces = [];
+        const keyToIndex = new Map();
+        const getVertexIndex = offset => {
+          const key = `${positions[offset].toFixed(5)},${positions[offset + 1].toFixed(5)},${positions[offset + 2].toFixed(5)}`;
+          if (keyToIndex.has(key)) return keyToIndex.get(key);
+          const index = vertices.length;
+          keyToIndex.set(key, index);
+          vertices.push([positions[offset], positions[offset + 1], positions[offset + 2]]);
+          return index;
+        };
+        for (let i = 0; i < positions.length; i += 9) {
+          faces.push([getVertexIndex(i), getVertexIndex(i + 3), getVertexIndex(i + 6)]);
+        }
+        const neighbors = vertices.map(() => new Set());
+        for (const [a, b, c] of faces) {
+          neighbors[a].add(b); neighbors[a].add(c);
+          neighbors[b].add(a); neighbors[b].add(c);
+          neighbors[c].add(a); neighbors[c].add(b);
+        }
+        let current = vertices.map(vertex => vertex.slice());
+        for (let pass = 0; pass < iterations; pass++) {
+          const next = current.map(vertex => vertex.slice());
+          for (let i = 0; i < current.length; i++) {
+            const list = [...neighbors[i]];
+            if (!list.length) continue;
+            const average = [0, 0, 0];
+            for (const ni of list) {
+              average[0] += current[ni][0];
+              average[1] += current[ni][1];
+              average[2] += current[ni][2];
+            }
+            average[0] /= list.length;
+            average[1] /= list.length;
+            average[2] /= list.length;
+            next[i] = [
+              mix(current[i][0], average[0], strength),
+              mix(current[i][1], average[1], strength),
+              mix(current[i][2], average[2], strength)
+            ];
+          }
+          current = next;
+        }
+        for (let i = 0; i < positions.length; i += 3) {
+          const key = `${positions[i].toFixed(5)},${positions[i + 1].toFixed(5)},${positions[i + 2].toFixed(5)}`;
+          const vertex = current[keyToIndex.get(key)];
+          if (!vertex) continue;
+          positions[i] = vertex[0];
+          positions[i + 1] = vertex[1];
+          positions[i + 2] = vertex[2];
+        }
+      };
       const greedyPlane = (w, h, isFilled, pushRect) => {
         const used = new Uint8Array(w * h);
         for (let yy = 0; yy < h; yy++) {
@@ -4126,38 +4212,39 @@
       for (let z = 0; z < gridZ; z++) {
         greedyPlane(gridX, gridY, (x, y) => isVoxel(x, y, z) && !isVoxel(x, y, z - 1), (x, y, w, h) => {
           mergedFaceCount++;
-          pushQuad(v(x, y, z, x / gridX, 1 - y / gridY), v(x + w, y, z, (x + w) / gridX, 1 - y / gridY), v(x + w, y + h, z, (x + w) / gridX, 1 - (y + h) / gridY), v(x, y + h, z, x / gridX, 1 - (y + h) / gridY));
+          pushQuadPatch(v(x, y, z, x / gridX, 1 - y / gridY), v(x + w, y, z, (x + w) / gridX, 1 - y / gridY), v(x + w, y + h, z, (x + w) / gridX, 1 - (y + h) / gridY), v(x, y + h, z, x / gridX, 1 - (y + h) / gridY), Math.ceil(w / maxPatchSpan), Math.ceil(h / maxPatchSpan));
         });
         greedyPlane(gridX, gridY, (x, y) => isVoxel(x, y, z) && !isVoxel(x, y, z + 1), (x, y, w, h) => {
           mergedFaceCount++;
-          pushQuad(v(x, y, z + 1, x / gridX, 1 - y / gridY), v(x, y + h, z + 1, x / gridX, 1 - (y + h) / gridY), v(x + w, y + h, z + 1, (x + w) / gridX, 1 - (y + h) / gridY), v(x + w, y, z + 1, (x + w) / gridX, 1 - y / gridY));
+          pushQuadPatch(v(x, y, z + 1, x / gridX, 1 - y / gridY), v(x, y + h, z + 1, x / gridX, 1 - (y + h) / gridY), v(x + w, y + h, z + 1, (x + w) / gridX, 1 - (y + h) / gridY), v(x + w, y, z + 1, (x + w) / gridX, 1 - y / gridY), Math.ceil(h / maxPatchSpan), Math.ceil(w / maxPatchSpan));
         });
       }
       for (let x = 0; x < gridX; x++) {
         greedyPlane(gridZ, gridY, (z, y) => isVoxel(x, y, z) && !isVoxel(x - 1, y, z), (z, y, w, h) => {
           mergedFaceCount++;
-          pushQuad(v(x, y, z, z / gridZ, 1 - y / gridY), v(x, y + h, z, z / gridZ, 1 - (y + h) / gridY), v(x, y + h, z + w, (z + w) / gridZ, 1 - (y + h) / gridY), v(x, y, z + w, (z + w) / gridZ, 1 - y / gridY));
+          pushQuadPatch(v(x, y, z, z / gridZ, 1 - y / gridY), v(x, y + h, z, z / gridZ, 1 - (y + h) / gridY), v(x, y + h, z + w, (z + w) / gridZ, 1 - (y + h) / gridY), v(x, y, z + w, (z + w) / gridZ, 1 - y / gridY), Math.ceil(h / maxPatchSpan), Math.ceil(w / maxPatchSpan));
         });
         greedyPlane(gridZ, gridY, (z, y) => isVoxel(x, y, z) && !isVoxel(x + 1, y, z), (z, y, w, h) => {
           mergedFaceCount++;
-          pushQuad(v(x + 1, y, z, z / gridZ, 1 - y / gridY), v(x + 1, y, z + w, (z + w) / gridZ, 1 - y / gridY), v(x + 1, y + h, z + w, (z + w) / gridZ, 1 - (y + h) / gridY), v(x + 1, y + h, z, z / gridZ, 1 - (y + h) / gridY));
+          pushQuadPatch(v(x + 1, y, z, z / gridZ, 1 - y / gridY), v(x + 1, y, z + w, (z + w) / gridZ, 1 - y / gridY), v(x + 1, y + h, z + w, (z + w) / gridZ, 1 - (y + h) / gridY), v(x + 1, y + h, z, z / gridZ, 1 - (y + h) / gridY), Math.ceil(w / maxPatchSpan), Math.ceil(h / maxPatchSpan));
         });
       }
       for (let y = 0; y < gridY; y++) {
         greedyPlane(gridX, gridZ, (x, z) => isVoxel(x, y, z) && !isVoxel(x, y - 1, z), (x, z, w, h) => {
           mergedFaceCount++;
-          pushQuad(v(x, y, z, x / gridX, z / gridZ), v(x, y, z + h, x / gridX, (z + h) / gridZ), v(x + w, y, z + h, (x + w) / gridX, (z + h) / gridZ), v(x + w, y, z, (x + w) / gridX, z / gridZ));
+          pushQuadPatch(v(x, y, z, x / gridX, z / gridZ), v(x, y, z + h, x / gridX, (z + h) / gridZ), v(x + w, y, z + h, (x + w) / gridX, (z + h) / gridZ), v(x + w, y, z, (x + w) / gridX, z / gridZ), Math.ceil(h / maxPatchSpan), Math.ceil(w / maxPatchSpan));
         });
         greedyPlane(gridX, gridZ, (x, z) => isVoxel(x, y, z) && !isVoxel(x, y + 1, z), (x, z, w, h) => {
           mergedFaceCount++;
-          pushQuad(v(x, y + 1, z, x / gridX, z / gridZ), v(x + w, y + 1, z, (x + w) / gridX, z / gridZ), v(x + w, y + 1, z + h, (x + w) / gridX, (z + h) / gridZ), v(x, y + 1, z + h, x / gridX, (z + h) / gridZ));
+          pushQuadPatch(v(x, y + 1, z, x / gridX, z / gridZ), v(x + w, y + 1, z, (x + w) / gridX, z / gridZ), v(x + w, y + 1, z + h, (x + w) / gridX, (z + h) / gridZ), v(x, y + 1, z + h, x / gridX, (z + h) / gridZ), Math.ceil(w / maxPatchSpan), Math.ceil(h / maxPatchSpan));
         });
       }
+      if (polishLevel > 0) relaxWeldedPositions(Math.min(4, polishLevel), .12);
       if (positions.length < 9) throw new Error("No sheet foreground was found. Try Threshold or Dark foreground.");
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetVoxelHullGreedy", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, depth, back, voxelCount, mergedFaceCount, viewRects }
+        meta: { mode: "viewSheetVoxelHullGreedyPolished", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, viewRects }
       };
     }
 
