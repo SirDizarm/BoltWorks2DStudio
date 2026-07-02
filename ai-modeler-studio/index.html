@@ -4071,13 +4071,48 @@
       const occupied = new Uint8Array(gridX * gridY * gridZ);
       const voxelIndex = (x, y, z) => (y * gridZ + z) * gridX + x;
       const isVoxel = (x, y, z) => x >= 0 && y >= 0 && z >= 0 && x < gridX && y < gridY && z < gridZ && occupied[voxelIndex(x, y, z)] === 1;
+      const rowRuns = (mask, width, y) => {
+        const runs = [];
+        let start = -1;
+        for (let x = 0; x <= width; x++) {
+          const active = x < width && mask[y * width + x];
+          if (active && start < 0) start = x;
+          if ((!active || x === width) && start >= 0) {
+            runs.push({ start, end: x - 1, center: (start + x) * .5, radius: Math.max(.5, (x - start) * .5) });
+            start = -1;
+          }
+        }
+        return runs;
+      };
+      const findRun = (runs, x) => runs.find(run => x >= run.start && x <= run.end) || null;
+      const sideProfiles = [];
+      const bodyRuns = [];
+      for (let y = 0; y < gridY; y++) {
+        const unionRow = new Array(gridX).fill(false);
+        for (let x = 0; x < gridX; x++) unionRow[x] = frontMask[y * gridX + x] || backMask[y * gridX + x];
+        const unionMask = new Array(gridX).fill(false);
+        for (let x = 0; x < gridX; x++) unionMask[x] = unionRow[x];
+        bodyRuns[y] = rowRuns(unionMask, gridX, 0);
+        const sideRuns = rowRuns(sideMask, gridZ, y);
+        const largestSide = sideRuns.sort((a, b) => (b.end - b.start) - (a.end - a.start))[0] || null;
+        sideProfiles[y] = largestSide;
+      }
       let voxelCount = 0;
       for (let y = 0; y < gridY; y++) {
+        const side = sideProfiles[y];
+        if (!side) continue;
         for (let x = 0; x < gridX; x++) {
-          const fb = frontMask[y * gridX + x] || backMask[y * gridX + x];
-          if (!fb) continue;
+          const run = findRun(bodyRuns[y], x);
+          if (!run) continue;
+          const xCenter = x + .5;
+          const xRound = Math.abs(xCenter - run.center) / Math.max(.5, run.radius);
+          if (xRound > 1.08) continue;
+          const zAllowance = Math.sqrt(Math.max(0, 1 - xRound * xRound)) * 1.08;
           for (let z = 0; z < gridZ; z++) {
             if (!sideMask[y * gridZ + z]) continue;
+            const zCenter = z + .5;
+            const zRound = Math.abs(zCenter - side.center) / Math.max(.5, side.radius);
+            if (zRound > zAllowance) continue;
             occupied[voxelIndex(x, y, z)] = 1;
             voxelCount++;
           }
@@ -4244,7 +4279,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetVoxelHullGreedyPolished", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, viewRects }
+        meta: { mode: "viewSheetOvalHullGreedyPolished", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, viewRects }
       };
     }
 
