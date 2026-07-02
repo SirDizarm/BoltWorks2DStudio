@@ -1301,6 +1301,29 @@
           <button id="previewIsoBtn" title="Preview the Iso save-view framing">Iso</button>
           <button id="resetZoomBtn" title="Reset the viewer zoom by framing the current model">Reset Zoom</button>
         </div>
+        <hr />
+        <strong>Image to Relief Mesh Lab</strong>
+        <p class="api-note">Prototype: import a bright mannequin/reference on a darker background, then create a thin height-map shell. Later this can be replaced by an AI depth map.</p>
+        <div class="compact-row">
+          <button id="reliefImageBtn" type="button" title="Load a mannequin or object reference image for height-map mesh generation">Load image</button>
+          <span id="reliefImageName" class="api-note">No image loaded</span>
+          <input id="reliefImageFile" type="file" accept="image/*,.png,.jpg,.jpeg,.webp,.bmp,.gif" hidden />
+        </div>
+        <div class="compact-row">
+          <label style="flex:1">Grid X <input id="reliefGridXInput" type="number" min="8" max="160" step="1" value="56" /></label>
+          <label style="flex:1">Grid Y <input id="reliefGridYInput" type="number" min="8" max="220" step="1" value="96" /></label>
+          <label style="flex:1">Scale <input id="reliefScaleInput" type="number" min="0.5" max="20" step="0.25" value="6" /></label>
+        </div>
+        <div class="compact-row">
+          <label style="flex:1">Depth <input id="reliefDepthInput" type="number" min="0" max="5" step="0.05" value="0.9" /></label>
+          <label style="flex:1">Back <input id="reliefBackInput" type="number" min="0" max="3" step="0.05" value="0.22" /></label>
+          <label style="flex:1">Threshold <input id="reliefThresholdInput" type="number" min="0" max="255" step="1" value="70" /></label>
+        </div>
+        <div class="compact-row">
+          <label style="flex:1">Smooth <input id="reliefSmoothInput" type="number" min="0" max="8" step="1" value="2" /></label>
+          <label class="toggle-chip" title="Use this when your object is dark on a light background"><input id="reliefDarkForegroundInput" type="checkbox" /> <span>Dark foreground</span></label>
+        </div>
+        <button id="createReliefMeshBtn" type="button" title="Generate an editable mesh from the loaded image height map">Create relief mesh</button>
         </div>
       </section>
       <section class="section log-section" id="statusSection">
@@ -1811,6 +1834,18 @@
       previewRightBtn: document.querySelector("#previewRightBtn"),
       previewTopBtn: document.querySelector("#previewTopBtn"),
       previewIsoBtn: document.querySelector("#previewIsoBtn"),
+      reliefImageBtn: document.querySelector("#reliefImageBtn"),
+      reliefImageFile: document.querySelector("#reliefImageFile"),
+      reliefImageName: document.querySelector("#reliefImageName"),
+      reliefGridXInput: document.querySelector("#reliefGridXInput"),
+      reliefGridYInput: document.querySelector("#reliefGridYInput"),
+      reliefScaleInput: document.querySelector("#reliefScaleInput"),
+      reliefDepthInput: document.querySelector("#reliefDepthInput"),
+      reliefBackInput: document.querySelector("#reliefBackInput"),
+      reliefThresholdInput: document.querySelector("#reliefThresholdInput"),
+      reliefSmoothInput: document.querySelector("#reliefSmoothInput"),
+      reliefDarkForegroundInput: document.querySelector("#reliefDarkForegroundInput"),
+      createReliefMeshBtn: document.querySelector("#createReliefMeshBtn"),
       saveFrontPngBtn: document.querySelector("#saveFrontPngBtn"),
       saveBackPngBtn: document.querySelector("#saveBackPngBtn"),
       saveLeftPngBtn: document.querySelector("#saveLeftPngBtn"),
@@ -1835,6 +1870,13 @@
     };
 
     const textureLibrary = new Map();
+    const reliefImageState = {
+      dataUrl: "",
+      name: "",
+      image: null,
+      canvas: null,
+      imageData: null
+    };
     const meshDetailsState = {
       meshId: null
     };
@@ -3791,6 +3833,173 @@
       selectObject(mesh);
       updateAll();
       return mesh;
+    }
+    function reliefNumber(input, fallback, min, max) {
+      const value = Number(input?.value);
+      return Math.max(min, Math.min(max, Number.isFinite(value) ? value : fallback));
+    }
+
+    function sampleReliefPixel(imageData, width, height, x, y) {
+      const px = Math.max(0, Math.min(width - 1, Math.round(x)));
+      const py = Math.max(0, Math.min(height - 1, Math.round(y)));
+      const i = (py * width + px) * 4;
+      const r = imageData.data[i] || 0;
+      const g = imageData.data[i + 1] || 0;
+      const b = imageData.data[i + 2] || 0;
+      const a = imageData.data[i + 3] ?? 255;
+      const luma = r * .2126 + g * .7152 + b * .0722;
+      return { r, g, b, a, luma };
+    }
+
+    function smoothReliefHeights(heights, mask, cols, rows, passes) {
+      let current = heights.slice();
+      for (let pass = 0; pass < passes; pass++) {
+        const next = current.slice();
+        for (let y = 0; y < rows; y++) {
+          for (let x = 0; x < cols; x++) {
+            const index = y * cols + x;
+            if (!mask[index]) continue;
+            let sum = current[index];
+            let count = 1;
+            for (let oy = -1; oy <= 1; oy++) {
+              for (let ox = -1; ox <= 1; ox++) {
+                if (!ox && !oy) continue;
+                const nx = x + ox;
+                const ny = y + oy;
+                if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+                const ni = ny * cols + nx;
+                if (!mask[ni]) continue;
+                sum += current[ni];
+                count++;
+              }
+            }
+            next[index] = sum / count;
+          }
+        }
+        current = next;
+      }
+      return current;
+    }
+
+    function createReliefGeometryFromImage() {
+      const imageData = reliefImageState.imageData;
+      const image = reliefImageState.image;
+      if (!imageData || !image) throw new Error("Load an image first.");
+      const sourceW = imageData.width;
+      const sourceH = imageData.height;
+      const cols = Math.max(8, Math.round(reliefNumber(els.reliefGridXInput, 56, 8, 160)));
+      const rows = Math.max(8, Math.round(reliefNumber(els.reliefGridYInput, 96, 8, 220)));
+      const scale = reliefNumber(els.reliefScaleInput, 6, .5, 20);
+      const depth = reliefNumber(els.reliefDepthInput, .9, 0, 5);
+      const back = reliefNumber(els.reliefBackInput, .22, 0, 3);
+      const threshold = reliefNumber(els.reliefThresholdInput, 70, 0, 255);
+      const smoothPasses = Math.round(reliefNumber(els.reliefSmoothInput, 2, 0, 8));
+      const darkForeground = !!els.reliefDarkForegroundInput?.checked;
+      const aspect = sourceW / Math.max(1, sourceH);
+      const meshH = scale;
+      const meshW = scale * aspect;
+      const mask = new Array(cols * rows).fill(false);
+      const heights = new Array(cols * rows).fill(0);
+
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const sx = (x / Math.max(1, cols - 1)) * (sourceW - 1);
+          const sy = (y / Math.max(1, rows - 1)) * (sourceH - 1);
+          const pixel = sampleReliefPixel(imageData, sourceW, sourceH, sx, sy);
+          const inForeground = pixel.a > 24 && (darkForeground ? pixel.luma <= threshold : pixel.luma >= threshold);
+          const index = y * cols + x;
+          mask[index] = inForeground;
+          const normalized = darkForeground
+            ? Math.max(0, Math.min(1, (threshold - pixel.luma) / Math.max(1, threshold)))
+            : Math.max(0, Math.min(1, (pixel.luma - threshold) / Math.max(1, 255 - threshold)));
+          heights[index] = Math.pow(normalized, .75) * depth;
+        }
+      }
+      const smoothHeights = smoothReliefHeights(heights, mask, cols, rows, smoothPasses);
+      const positions = [];
+      const uvs = [];
+      const point = (x, y, z) => [
+        (x / Math.max(1, cols - 1) - .5) * meshW,
+        (.5 - y / Math.max(1, rows - 1)) * meshH,
+        z
+      ];
+      const uv = (x, y) => [x / Math.max(1, cols - 1), 1 - y / Math.max(1, rows - 1)];
+      const pushTri = (a, b, c) => {
+        positions.push(...a.p, ...b.p, ...c.p);
+        uvs.push(...a.uv, ...b.uv, ...c.uv);
+      };
+      const pushQuad = (a, b, c, d) => {
+        pushTri(a, b, c);
+        pushTri(a, c, d);
+      };
+      const frontVertex = (x, y) => ({ p: point(x, y, smoothHeights[y * cols + x]), uv: uv(x, y) });
+      const backVertex = (x, y) => ({ p: point(x, y, -back), uv: uv(x, y) });
+      const isValid = (x, y) => x >= 0 && y >= 0 && x < cols && y < rows && mask[y * cols + x];
+
+      for (let y = 0; y < rows - 1; y++) {
+        for (let x = 0; x < cols - 1; x++) {
+          if (!(isValid(x, y) && isValid(x + 1, y) && isValid(x + 1, y + 1) && isValid(x, y + 1))) continue;
+          const a = frontVertex(x, y), b = frontVertex(x + 1, y), c = frontVertex(x + 1, y + 1), d = frontVertex(x, y + 1);
+          pushQuad(a, d, c, b);
+          if (back > 0) {
+            const ba = backVertex(x, y), bb = backVertex(x + 1, y), bc = backVertex(x + 1, y + 1), bd = backVertex(x, y + 1);
+            pushQuad(ba, bb, bc, bd);
+          }
+        }
+      }
+      if (back > 0) {
+        for (let y = 0; y < rows; y++) {
+          for (let x = 0; x < cols; x++) {
+            if (!isValid(x, y)) continue;
+            if (!isValid(x, y - 1) && isValid(x + 1, y)) pushQuad(frontVertex(x, y), frontVertex(x + 1, y), backVertex(x + 1, y), backVertex(x, y));
+            if (!isValid(x + 1, y) && isValid(x, y + 1)) pushQuad(frontVertex(x, y), backVertex(x, y), backVertex(x, y + 1), frontVertex(x, y + 1));
+            if (!isValid(x, y + 1) && isValid(x + 1, y)) pushQuad(frontVertex(x, y), backVertex(x, y), backVertex(x + 1, y), frontVertex(x + 1, y));
+            if (!isValid(x - 1, y) && isValid(x, y + 1)) pushQuad(frontVertex(x, y), frontVertex(x, y + 1), backVertex(x, y + 1), backVertex(x, y));
+          }
+        }
+      }
+      if (positions.length < 9) throw new Error("No foreground mesh was found. Try lowering/raising Threshold or toggling Dark foreground.");
+      return {
+        positions,
+        uvs,
+        meta: { cols, rows, sourceW, sourceH, threshold, darkForeground, smoothPasses, depth, back }
+      };
+    }
+
+    async function loadReliefImageFile(file) {
+      if (!file) return;
+      const dataUrl = await readFileAsDataUrl(file);
+      const image = await loadImage(dataUrl);
+      const canvas = readImageToCanvas(image);
+      reliefImageState.dataUrl = dataUrl;
+      reliefImageState.name = file.name || "reference image";
+      reliefImageState.image = image;
+      reliefImageState.canvas = canvas;
+      reliefImageState.imageData = canvas.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, canvas.width, canvas.height);
+      if (els.reliefImageName) els.reliefImageName.textContent = `${reliefImageState.name} (${canvas.width}x${canvas.height})`;
+      log(`Loaded relief source image: ${reliefImageState.name} (${canvas.width} x ${canvas.height}).`);
+    }
+
+    function createReliefMeshFromLoadedImage() {
+      try {
+        recordHistory("image relief mesh");
+        const { positions, uvs, meta } = createReliefGeometryFromImage();
+        const baseName = reliefImageState.name.replace(/\.[^.]+$/, "") || "image relief";
+        const mesh = addObject({
+          shape: "imageRelief",
+          name: `${baseName} relief mesh`,
+          geometry: { positions, uvs },
+          color: "#d8d8d8",
+          roughness: .48,
+          position: [0, 0, 0]
+        }, { record: false });
+        mesh.userData.reliefSource = { ...meta, sourceName: reliefImageState.name };
+        frameSelected();
+        log(`Created relief mesh from ${reliefImageState.name}: ${positions.length / 9} triangles, grid ${meta.cols} x ${meta.rows}.`);
+      } catch (error) {
+        log(`Relief mesh failed: ${error.message}`);
+        alert(error.message);
+      }
     }
 
     function addProceduralAssembly(kind, options = {}, { record = true, offset = [0, 0, 0], prefix = "" } = {}) {
@@ -12450,6 +12659,18 @@ end
       frameSelected();
       log("Viewer zoom reset by framing the current model.");
     });
+    els.reliefImageBtn?.addEventListener("click", () => els.reliefImageFile?.click());
+    els.reliefImageFile?.addEventListener("change", async event => {
+      try {
+        await loadReliefImageFile(event.target.files?.[0]);
+      } catch (error) {
+        log(`Could not load relief image: ${error.message}`);
+        alert(error.message);
+      } finally {
+        event.target.value = "";
+      }
+    });
+    els.createReliefMeshBtn?.addEventListener("click", createReliefMeshFromLoadedImage);
     els.previewFrontBtn.addEventListener("click", () => previewShotView("front"));
     els.previewBackBtn.addEventListener("click", () => previewShotView("back"));
     els.previewLeftBtn.addEventListener("click", () => previewShotView("left"));
