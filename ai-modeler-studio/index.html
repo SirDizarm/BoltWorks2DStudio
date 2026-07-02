@@ -4013,37 +4013,83 @@
     function createReliefGeometryFromViewSheet({ imageData, cols, rows, scale, depth, back, threshold, smoothPasses, darkForeground }) {
       const viewRects = detectReliefViewRects(imageData, threshold, darkForeground);
       const [frontRect, sideRect, backRect] = viewRects;
-      const front = smoothReliefProfile(buildReliefViewProfile(imageData, frontRect, rows, threshold, darkForeground), smoothPasses);
-      const side = smoothReliefProfile(buildReliefViewProfile(imageData, sideRect, rows, threshold, darkForeground), smoothPasses);
-      const backView = smoothReliefProfile(buildReliefViewProfile(imageData, backRect, rows, threshold, darkForeground), smoothPasses);
-      const segments = Math.max(16, Math.min(96, cols));
+      const gridX = Math.max(12, Math.min(72, Math.round(cols)));
+      const gridY = Math.max(16, Math.min(128, Math.round(rows)));
+      const gridZ = Math.max(10, Math.min(44, Math.round(gridX * .55)));
+      const meshH = scale;
+      const meshW = scale * .52;
+      const meshD = Math.max(back, depth, .25) * 2.4;
+      const frontMask = new Array(gridX * gridY).fill(false);
+      const backMask = new Array(gridX * gridY).fill(false);
+      const sideMask = new Array(gridZ * gridY).fill(false);
+      const sampleRect = (rect, nx, ny) => {
+        const sx = rect.x + Math.max(0, Math.min(1, nx)) * Math.max(1, rect.w - 1);
+        const sy = rect.y + Math.max(0, Math.min(1, ny)) * Math.max(1, rect.h - 1);
+        return sampleReliefPixel(imageData, imageData.width, imageData.height, sx, sy);
+      };
+      for (let y = 0; y < gridY; y++) {
+        const ny = y / Math.max(1, gridY - 1);
+        for (let x = 0; x < gridX; x++) {
+          const nx = x / Math.max(1, gridX - 1);
+          frontMask[y * gridX + x] = reliefForegroundCheck(sampleRect(frontRect, nx, ny), threshold, darkForeground);
+          backMask[y * gridX + x] = reliefForegroundCheck(sampleRect(backRect, 1 - nx, ny), threshold, darkForeground);
+        }
+        for (let z = 0; z < gridZ; z++) {
+          const nz = z / Math.max(1, gridZ - 1);
+          sideMask[y * gridZ + z] = reliefForegroundCheck(sampleRect(sideRect, nz, ny), threshold, darkForeground);
+        }
+      }
+      if (smoothPasses > 0) {
+        const softenMask = (mask, w, h, passes) => {
+          let current = mask.slice();
+          for (let pass = 0; pass < passes; pass++) {
+            const next = current.slice();
+            for (let y = 1; y < h - 1; y++) {
+              for (let x = 1; x < w - 1; x++) {
+                let hits = 0;
+                for (let oy = -1; oy <= 1; oy++) {
+                  for (let ox = -1; ox <= 1; ox++) {
+                    if (current[(y + oy) * w + x + ox]) hits++;
+                  }
+                }
+                next[y * w + x] = hits >= 4;
+              }
+            }
+            current = next;
+          }
+          return current;
+        };
+        const passes = Math.min(2, smoothPasses);
+        for (const [target, softened] of [
+          [frontMask, softenMask(frontMask, gridX, gridY, passes)],
+          [backMask, softenMask(backMask, gridX, gridY, passes)],
+          [sideMask, softenMask(sideMask, gridZ, gridY, passes)]
+        ]) {
+          for (let i = 0; i < target.length; i++) target[i] = softened[i];
+        }
+      }
+      const occupied = new Uint8Array(gridX * gridY * gridZ);
+      const voxelIndex = (x, y, z) => (y * gridZ + z) * gridX + x;
+      const isVoxel = (x, y, z) => x >= 0 && y >= 0 && z >= 0 && x < gridX && y < gridY && z < gridZ && occupied[voxelIndex(x, y, z)] === 1;
+      let voxelCount = 0;
+      for (let y = 0; y < gridY; y++) {
+        for (let x = 0; x < gridX; x++) {
+          const fb = frontMask[y * gridX + x] || backMask[y * gridX + x];
+          if (!fb) continue;
+          for (let z = 0; z < gridZ; z++) {
+            if (!sideMask[y * gridZ + z]) continue;
+            occupied[voxelIndex(x, y, z)] = 1;
+            voxelCount++;
+          }
+        }
+      }
       const positions = [];
       const uvs = [];
-      const meshH = scale;
-      const meshW = scale * .42;
-      const meshD = Math.max(back, depth) * 1.7;
-      const activeAt = y => front[y].active || side[y].active || backView[y].active;
-      const rowRadius = y => {
-        const fw = front[y].active ? front[y].width : 0;
-        const bw = backView[y].active ? backView[y].width : fw;
-        const sw = side[y].active ? side[y].width : Math.max(fw, bw) * .55;
-        const luma = [front[y], side[y], backView[y]].filter(v => v.active).reduce((sum, v) => sum + v.luma, 0) / Math.max(1, [front[y], side[y], backView[y]].filter(v => v.active).length);
-        const relief = darkForeground
-          ? Math.max(0, Math.min(1, (threshold - luma) / Math.max(1, threshold)))
-          : Math.max(0, Math.min(1, (luma - threshold) / Math.max(1, 255 - threshold)));
-        return {
-          x: Math.max(.015, ((fw + bw) * .5) * meshW * (.8 + relief * .25)),
-          z: Math.max(.015, sw * meshD * (.85 + relief * .2))
-        };
-      };
-      const vertex = (x, y) => {
-        const theta = (x / segments) * Math.PI * 2;
-        const r = rowRadius(y);
-        return {
-          p: [Math.cos(theta) * r.x, (.5 - y / Math.max(1, rows - 1)) * meshH, Math.sin(theta) * r.z],
-          uv: [x / segments, 1 - y / Math.max(1, rows - 1)]
-        };
-      };
+      const point = (x, y, z) => [
+        (x / gridX - .5) * meshW,
+        (.5 - y / gridY) * meshH,
+        (z / gridZ - .5) * meshD
+      ];
       const pushTri = (a, b, c) => {
         positions.push(...a.p, ...b.p, ...c.p);
         uvs.push(...a.uv, ...b.uv, ...c.uv);
@@ -4052,21 +4098,29 @@
         pushTri(a, b, c);
         pushTri(a, c, d);
       };
-      for (let y = 0; y < rows - 1; y++) {
-        if (!activeAt(y) || !activeAt(y + 1)) continue;
-        for (let x = 0; x < segments; x++) {
-          const a = vertex(x, y);
-          const b = vertex(x + 1, y);
-          const c = vertex(x + 1, y + 1);
-          const d = vertex(x, y + 1);
-          pushQuad(a, d, c, b);
+      const v = (x, y, z, u, vv) => ({ p: point(x, y, z), uv: [u, vv] });
+      for (let y = 0; y < gridY; y++) {
+        for (let z = 0; z < gridZ; z++) {
+          for (let x = 0; x < gridX; x++) {
+            if (!isVoxel(x, y, z)) continue;
+            const u0 = x / gridX;
+            const u1 = (x + 1) / gridX;
+            const v0 = 1 - y / gridY;
+            const v1 = 1 - (y + 1) / gridY;
+            if (!isVoxel(x, y, z - 1)) pushQuad(v(x, y, z, u0, v0), v(x + 1, y, z, u1, v0), v(x + 1, y + 1, z, u1, v1), v(x, y + 1, z, u0, v1));
+            if (!isVoxel(x, y, z + 1)) pushQuad(v(x, y, z + 1, u0, v0), v(x, y + 1, z + 1, u0, v1), v(x + 1, y + 1, z + 1, u1, v1), v(x + 1, y, z + 1, u1, v0));
+            if (!isVoxel(x - 1, y, z)) pushQuad(v(x, y, z, 0, v0), v(x, y + 1, z, 0, v1), v(x, y + 1, z + 1, 1, v1), v(x, y, z + 1, 1, v0));
+            if (!isVoxel(x + 1, y, z)) pushQuad(v(x + 1, y, z, 0, v0), v(x + 1, y, z + 1, 1, v0), v(x + 1, y + 1, z + 1, 1, v1), v(x + 1, y + 1, z, 0, v1));
+            if (!isVoxel(x, y - 1, z)) pushQuad(v(x, y, z, u0, 0), v(x, y, z + 1, u0, 1), v(x + 1, y, z + 1, u1, 1), v(x + 1, y, z, u1, 0));
+            if (!isVoxel(x, y + 1, z)) pushQuad(v(x, y + 1, z, u0, 0), v(x + 1, y + 1, z, u1, 0), v(x + 1, y + 1, z + 1, u1, 1), v(x, y + 1, z + 1, u0, 1));
+          }
         }
       }
       if (positions.length < 9) throw new Error("No sheet foreground was found. Try Threshold or Dark foreground.");
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheet", cols, rows, segments, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, depth, back, viewRects }
+        meta: { mode: "viewSheetVoxelHull", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, depth, back, voxelCount, viewRects }
       };
     }
 
