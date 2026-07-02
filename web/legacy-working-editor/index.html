@@ -355,17 +355,17 @@
               <label>W<input id="selectionW" type="number" min="1" step="1" disabled></label>
               <label>H<input id="selectionH" type="number" min="1" step="1" disabled></label>
             </div>
-            <button id="selectVisibleSprite">Select visible image</button>
-            <button id="lassoSelectSprite">Lasso select</button>
-            <button id="extractAsset" class="accent" disabled>Save selection to library</button>
-            <button id="copySelectedSprite" disabled>Copy selection</button>
-            <button id="extractSelectedLayer" disabled>Extract selection as layer</button>
-            <button id="pasteCopiedSprite" disabled>Paste as floating layer</button>
-            <button id="moveFloatingPaste" disabled>Move layer</button>
-            <button id="warpFloatingPaste" disabled>Warp layer</button>
-            <button id="mergeFloatingPaste" disabled>Merge layer</button>
-            <button id="cancelFloatingPaste" disabled>Cancel layer</button>
-            <button id="undoAssetEdit" disabled>Undo last asset edit</button>
+            <button id="selectVisibleSprite">[□] Select visible image</button>
+            <button id="lassoSelectSprite">( ) Lasso select</button>
+            <button id="extractAsset" class="accent" disabled>↓ Save selection to library</button>
+            <button id="copySelectedSprite" disabled>⧉ Copy selection</button>
+            <button id="extractSelectedLayer" disabled>✂ Extract selection as layer</button>
+            <button id="pasteCopiedSprite" disabled>⇩ Paste as floating layer</button>
+            <button id="moveFloatingPaste" disabled>✋ Move layer</button>
+            <button id="warpFloatingPaste" disabled>~ Warp layer</button>
+            <button id="mergeFloatingPaste" disabled>+ Merge layer</button>
+            <button id="cancelFloatingPaste" disabled>× Cancel layer</button>
+            <button id="undoAssetEdit" disabled>↶ Undo last asset edit</button>
             <div class="asset-multiply-panel">
               <strong>Multiply selected sprite</strong>
               <span>Repeats the selected area into a new PNG sheet for frame/joint experiments.</span>
@@ -376,18 +376,18 @@
             <div class="floating-layer-scale">
               <label>Layer scale <span id="floatingLayerScaleValue">100%</span><input id="floatingLayerScale" type="range" min="10" max="400" value="100" disabled></label>
               <input id="floatingLayerScaleExact" type="number" min="10" max="400" step="1" value="100" disabled>
-              <button id="resetFloatingLayerScale" disabled>Reset scale</button>
+              <button id="resetFloatingLayerScale" disabled>↺ Reset scale</button>
               <label>Layer rotation <span id="floatingLayerRotationValue">0 deg</span><input id="floatingLayerRotation" type="range" min="-180" max="180" value="0" disabled></label>
               <input id="floatingLayerRotationExact" type="number" min="-180" max="180" step="1" value="0" disabled>
-              <button id="resetFloatingLayerRotation" disabled>Reset rotation</button>
+              <button id="resetFloatingLayerRotation" disabled>↺ Reset rotation</button>
               <div class="floating-layer-flips">
-                <label class="check"><input id="pasteFlipX" type="checkbox" disabled> Flip H</label>
-                <label class="check"><input id="pasteFlipY" type="checkbox" disabled> Flip V</label>
+                <label class="check"><input id="pasteFlipX" type="checkbox" disabled> ↔ Flip H |⇄|</label>
+                <label class="check"><input id="pasteFlipY" type="checkbox" disabled> ↕ Flip V _⇅_</label>
               </div>
             </div>
             <div class="warp-layer-tools">
               <strong>Warp / puppet draft</strong>
-              <span>Copy/paste a part as a floating layer, press Warp layer, then drag the corner and side pins. Apply with Merge layer or cancel without changing the asset.</span>
+              <span>Copy/paste a part as a floating layer, press ~ Warp layer, then drag the corner and side pins. Apply with + Merge layer or × Cancel layer without changing the asset.</span>
               <button id="resetWarpLayer" disabled>Reset warp corners</button>
             </div>
             <div class="asset-layer-panel">
