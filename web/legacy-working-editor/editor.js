@@ -36,6 +36,36 @@
   const assetCategories = ["working", "character", "world", "object", "part", "scene", "inventory"];
   const assetCategoryLabels = { working: "Working", character: "Character", world: "World", object: "Objects", part: "Parts", scene: "Scenes", inventory: "Inventory" };
 
+
+  function defaultWeather() {
+    return {
+      current: "clear",
+      intensity: .45,
+      dailyChange: true,
+      stormFinds: true,
+      outdoorDamage: true
+    };
+  }
+
+  function normalizeWeather(weather = {}) {
+    const defaults = defaultWeather();
+    const allowed = new Set(["clear", "rain", "snow", "storm", "fog"]);
+    const current = allowed.has(weather.current) ? weather.current : defaults.current;
+    return {
+      ...defaults,
+      ...weather,
+      current,
+      intensity: clamp(Number(weather.intensity ?? defaults.intensity), 0, 1),
+      dailyChange: weather.dailyChange !== false,
+      stormFinds: weather.stormFinds !== false,
+      outdoorDamage: weather.outdoorDamage !== false
+    };
+  }
+
+  function projectWeather() {
+    project.weather = normalizeWeather(project.weather);
+    return project.weather;
+  }
   function defaultGameRules() {
     return {
       mode: "normal",
@@ -47,7 +77,8 @@
         instantActions: false,
         timeSpeed: 1,
         moneyMultiplier: 1,
-        showInteractionZones: false
+        showInteractionZones: false,
+        alwaysClearWeather: false
       }
     };
   }
@@ -61,6 +92,7 @@
     assist.noToolBreakage = !!assist.noToolBreakage;
     assist.instantActions = !!assist.instantActions;
     assist.showInteractionZones = !!assist.showInteractionZones;
+    assist.alwaysClearWeather = !!assist.alwaysClearWeather;
     assist.timeSpeed = clamp(Number(assist.timeSpeed) || 1, 0, 8);
     assist.moneyMultiplier = clamp(Number(assist.moneyMultiplier) || 1, 0, 20);
     return { ...defaults, ...rules, mode: rules.mode || defaults.mode, assist };
@@ -81,11 +113,16 @@
   function actionDurationScale() { const assist = assistRules(); return assist.enabled && assist.instantActions ? 0 : 1; }
   function assistMoneyMultiplier() { const assist = assistRules(); return assist.enabled ? clamp(Number(assist.moneyMultiplier) || 1, 0, 20) : 1; }
   function shouldShowInteractionZones() { const assist = assistRules(); return !!(assist.enabled && assist.showInteractionZones); }
+  function currentWeather() { const assist = assistRules(); return assist.enabled && assist.alwaysClearWeather ? { ...projectWeather(), current: "clear", intensity: 0, forcedClear: true } : projectWeather(); }
+  function wetWeatherActive() { return ["rain", "storm", "snow"].includes(currentWeather().current); }
+  function stormEventsAllowed() { const assist = assistRules(); const weather = currentWeather(); return weather.current === "storm" && weather.stormFinds && !(assist.enabled && assist.alwaysClearWeather); }
+  function outdoorWeatherDamageAllowed() { const assist = assistRules(); return wetWeatherActive() && currentWeather().outdoorDamage && !(assist.enabled && assist.alwaysClearWeather); }
   const starterProject = () => ({
     version: 1,
     name: "My Scrapyard Story",
     world: { width: 5200, height: 720, groundHeight: 150 },
     gameRules: defaultGameRules(),
+    weather: defaultWeather(),
     layers: [
       { id: "background", name: "Sky / fixed background", parallax: 0, visible: true, color: "#7d908b" },
       { id: "far", name: "Far scenery", parallax: 0.18, visible: true, color: "#66756b" },
@@ -348,6 +385,7 @@
       ...base, ...data,
       world: { ...base.world, ...(data.world || {}) },
       gameRules: normalizeGameRules(data.gameRules || base.gameRules),
+      weather: normalizeWeather(data.weather || base.weather),
       scenes,
       player: { ...base.player, ...(data.player || {}) },
       activeSceneId,
@@ -608,6 +646,53 @@
   }
 
 
+
+  function drawWeatherOverlay(ctx, viewX, viewportW, worldH, now = 0) {
+    const weather = currentWeather();
+    if (!weather || weather.current === "clear" || weather.intensity <= 0) return;
+    const intensity = clamp(Number(weather.intensity) || 0, 0, 1);
+    ctx.save();
+    // Weather is screen-space: the rain/snow/fog sits over the camera view, not at one world X.
+    if (weather.current === "rain" || weather.current === "storm") {
+      ctx.globalAlpha = weather.current === "storm" ? .22 + intensity * .18 : .14 + intensity * .16;
+      ctx.fillStyle = weather.current === "storm" ? "#667181" : "#6f8091";
+      ctx.fillRect(0, 0, viewportW, worldH);
+      ctx.globalAlpha = .3 + intensity * .45;
+      ctx.strokeStyle = weather.current === "storm" ? "#b8c4d4" : "#9db2c7";
+      ctx.lineWidth = weather.current === "storm" ? 2 : 1.4;
+      const count = Math.round(70 + intensity * 170);
+      const wind = weather.current === "storm" ? 48 : 24;
+      for (let i = 0; i < count; i++) {
+        const x = ((i * 97 + now * (90 + wind)) % (viewportW + 180)) - 90;
+        const y = (i * 53 + now * (260 + wind)) % worldH;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - wind, y + 26 + intensity * 18);
+        ctx.stroke();
+      }
+    } else if (weather.current === "snow") {
+      ctx.globalAlpha = .16 + intensity * .2;
+      ctx.fillStyle = "#dce8ef";
+      const count = Math.round(45 + intensity * 120);
+      for (let i = 0; i < count; i++) {
+        const x = ((i * 83 + Math.sin(now * .7 + i) * 30 + now * 26) % (viewportW + 80)) - 40;
+        const y = (i * 61 + now * (28 + intensity * 48)) % worldH;
+        ctx.beginPath();
+        ctx.arc(x, y, 1.2 + intensity * 2.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (weather.current === "fog") {
+      ctx.globalAlpha = .18 + intensity * .35;
+      const fog = ctx.createLinearGradient(0, 0, 0, worldH);
+      fog.addColorStop(0, "rgba(205,214,204,.25)");
+      fog.addColorStop(.55, "rgba(205,214,204,.55)");
+      fog.addColorStop(1, "rgba(205,214,204,.18)");
+      ctx.fillStyle = fog;
+      ctx.fillRect(0, 0, viewportW, worldH);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
   function drawInteractionZoneOverlay(ctx, viewX) {
     if (!shouldShowInteractionZones()) return;
     ctx.save();
@@ -1839,6 +1924,8 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     const assist = assistRules();
     if ($("#assistTimeSpeedValue")) $("#assistTimeSpeedValue").textContent = assist.pauseTime ? "paused" : `${assist.timeSpeed}x`;
     if ($("#assistMoneyMultiplierValue")) $("#assistMoneyMultiplierValue").textContent = `${assist.moneyMultiplier}x`;
+    const weather = projectWeather();
+    if ($("#weatherIntensityValue")) $("#weatherIntensityValue").textContent = `${Math.round(weather.intensity * 100)}%`;
   }
 
   function syncAssistControls() {
@@ -1849,10 +1936,18 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       assistNoAccidents: assist.noAccidents,
       assistNoToolBreakage: assist.noToolBreakage,
       assistInstantActions: assist.instantActions,
-      assistShowInteractionZones: assist.showInteractionZones
+      assistShowInteractionZones: assist.showInteractionZones,
+      assistAlwaysClearWeather: assist.alwaysClearWeather
     };
     Object.entries(pairs).forEach(([id, value]) => { const el = $("#" + id); if (el) el.checked = !!value; });
     [["assistTimeSpeed", assist.timeSpeed], ["assistTimeSpeedExact", assist.timeSpeed], ["assistMoneyMultiplier", assist.moneyMultiplier], ["assistMoneyMultiplierExact", assist.moneyMultiplier]].forEach(([id, value]) => { const el = $("#" + id); if (el) el.value = value; });
+    const weather = projectWeather();
+    if ($("#weatherCurrent")) $("#weatherCurrent").value = weather.current;
+    if ($("#weatherIntensity")) $("#weatherIntensity").value = Math.round(weather.intensity * 100);
+    if ($("#weatherIntensityExact")) $("#weatherIntensityExact").value = Math.round(weather.intensity * 100);
+    if ($("#weatherDailyChange")) $("#weatherDailyChange").checked = !!weather.dailyChange;
+    if ($("#weatherOutdoorDamage")) $("#weatherOutdoorDamage").checked = !!weather.outdoorDamage;
+    if ($("#weatherStormFinds")) $("#weatherStormFinds").checked = !!weather.stormFinds;
     updateLabels();
   }
 
@@ -1863,7 +1958,8 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       assistNoAccidents: "noAccidents",
       assistNoToolBreakage: "noToolBreakage",
       assistInstantActions: "instantActions",
-      assistShowInteractionZones: "showInteractionZones"
+      assistShowInteractionZones: "showInteractionZones",
+      assistAlwaysClearWeather: "alwaysClearWeather"
     };
     Object.entries(checkMap).forEach(([id, key]) => {
       const el = $("#" + id);
@@ -5628,7 +5724,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   const keys = new Set();
   const images = new Map();
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-  const baseGameRules = { mode:"normal", assist:{ enabled:false, pauseTime:false, noAccidents:false, noToolBreakage:false, instantActions:false, timeSpeed:1, moneyMultiplier:1, showInteractionZones:false } };
+  const baseGameRules = { mode:"normal", assist:{ enabled:false, pauseTime:false, noAccidents:false, noToolBreakage:false, instantActions:false, timeSpeed:1, moneyMultiplier:1, showInteractionZones:false, alwaysClearWeather:false } };
   const gameRules = { ...baseGameRules, ...(project.gameRules || {}), assist:{ ...baseGameRules.assist, ...((project.gameRules || {}).assist || {}) } };
   const rules = {
     assistEnabled: () => !!gameRules.assist.enabled,
@@ -5637,7 +5733,10 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     canToolBreak: () => !(gameRules.assist.enabled && gameRules.assist.noToolBreakage),
     actionTimeScale: () => gameRules.assist.enabled && gameRules.assist.instantActions ? 0 : 1,
     moneyMultiplier: () => gameRules.assist.enabled ? clamp(Number(gameRules.assist.moneyMultiplier) || 1, 0, 20) : 1,
-    showInteractionZones: () => !!(gameRules.assist.enabled && gameRules.assist.showInteractionZones)
+    showInteractionZones: () => !!(gameRules.assist.enabled && gameRules.assist.showInteractionZones),
+    weather: () => gameRules.assist.enabled && gameRules.assist.alwaysClearWeather ? { ...normalizeWeather(project.weather || {}), current:"clear", intensity:0, forcedClear:true } : normalizeWeather(project.weather || {}),
+    isWetWeather: () => ["rain", "storm", "snow"].includes(rules.weather().current),
+    weatherEventsAllowed: () => !(gameRules.assist.enabled && gameRules.assist.alwaysClearWeather)
   };
   window.BoltWorksRules = rules;
   const bodyParts = ["backArm", "backLeg", "head", "torso", "frontLeg", "frontArm"];
@@ -5808,6 +5907,35 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     cameraX = clamp(player.x - innerWidth*.45, 0, Math.max(0, (project.world.width || 5000) - innerWidth));
     if (dialogueUntil && elapsed > dialogueUntil) document.getElementById("dialogue").style.display="none";
   }
+  function normalizeWeather(weather = {}) {
+    const allowed = new Set(["clear", "rain", "snow", "storm", "fog"]);
+    return { current: allowed.has(weather.current) ? weather.current : "clear", intensity: clamp(Number(weather.intensity ?? .45), 0, 1), dailyChange: weather.dailyChange !== false, stormFinds: weather.stormFinds !== false, outdoorDamage: weather.outdoorDamage !== false };
+  }
+  function drawWeather(viewportW) {
+    const weather = rules.weather();
+    if (!weather || weather.current === "clear" || weather.intensity <= 0) return;
+    const intensity = clamp(Number(weather.intensity) || 0, 0, 1);
+    const worldH = project.world.height || 720;
+    ctx.save();
+    ctx.translate(cameraX, 0);
+    if (weather.current === "rain" || weather.current === "storm") {
+      ctx.globalAlpha = weather.current === "storm" ? .22 + intensity * .18 : .14 + intensity * .16;
+      ctx.fillStyle = weather.current === "storm" ? "#667181" : "#6f8091";
+      ctx.fillRect(0, 0, viewportW, worldH);
+      ctx.globalAlpha = .3 + intensity * .45;
+      ctx.strokeStyle = weather.current === "storm" ? "#b8c4d4" : "#9db2c7";
+      ctx.lineWidth = weather.current === "storm" ? 2 : 1.4;
+      const count = Math.round(70 + intensity * 170), wind = weather.current === "storm" ? 48 : 24;
+      for (let i=0;i<count;i++) { const x=((i*97+elapsed*(90+wind))%(viewportW+180))-90; const y=(i*53+elapsed*(260+wind))%worldH; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x-wind,y+26+intensity*18); ctx.stroke(); }
+    } else if (weather.current === "snow") {
+      ctx.globalAlpha = .16 + intensity * .2; ctx.fillStyle = "#dce8ef";
+      const count = Math.round(45 + intensity * 120);
+      for (let i=0;i<count;i++) { const x=((i*83+Math.sin(elapsed*.7+i)*30+elapsed*26)%(viewportW+80))-40; const y=(i*61+elapsed*(28+intensity*48))%worldH; ctx.beginPath(); ctx.arc(x,y,1.2+intensity*2.6,0,Math.PI*2); ctx.fill(); }
+    } else if (weather.current === "fog") {
+      ctx.globalAlpha = .18 + intensity * .35; ctx.fillStyle = "rgba(205,214,204,.55)"; ctx.fillRect(0, 0, viewportW, worldH);
+    }
+    ctx.restore(); ctx.globalAlpha = 1;
+  }
   function drawAssistZones() {
     if (!rules.showInteractionZones()) return;
     ctx.save();
@@ -5830,7 +5958,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     const sky = ctx.createLinearGradient(0,0,0,project.world.height||720); sky.addColorStop(0,"#7d918e"); sky.addColorStop(.7,"#b3aa8b"); sky.addColorStop(1,"#76705a"); ctx.fillStyle=sky; ctx.fillRect(0,0,viewportW,project.world.height||720);
     for (const layer of visibleLayers()) { ctx.save(); const off = cameraX*(layer.parallax||1); ctx.translate(-off,0); drawLayerBackdrop(layer,cameraX,viewportW); sceneObjects().filter(o => o.layer === layer.id && !o.alwaysOnTop).forEach(drawObject); ctx.restore(); }
     for (const layer of visibleLayers()) { ctx.save(); const off = cameraX*(layer.parallax||1); ctx.translate(-off,0); sceneObjects().filter(o => o.layer === layer.id && o.alwaysOnTop).forEach(drawObject); ctx.restore(); }
-    ctx.save(); ctx.translate(-cameraX,0); particles.forEach(p => { const t=clamp(p.age/p.life,0,1); ctx.globalAlpha=(1-t)*.42; ctx.fillStyle="#d8c99e"; ctx.beginPath(); ctx.ellipse(p.x,p.y,p.size*(1+t),p.size*.45,0,0,Math.PI*2); ctx.fill(); }); drawAssistZones(); drawPlayer(); ctx.restore(); ctx.restore();
+    ctx.save(); ctx.translate(-cameraX,0); particles.forEach(p => { const t=clamp(p.age/p.life,0,1); ctx.globalAlpha=(1-t)*.42; ctx.fillStyle="#d8c99e"; ctx.beginPath(); ctx.ellipse(p.x,p.y,p.size*(1+t),p.size*.45,0,0,Math.PI*2); ctx.fill(); }); drawWeather(viewportW); drawAssistZones(); drawPlayer(); ctx.restore(); ctx.restore();
     document.getElementById("sceneName").textContent = (scene().name || "Scene") + (near ? " · E: " + (near.prompt || near.name || "Interact") : "");
     const minutes = Math.floor(7*60 + clockElapsed*8); document.getElementById("clock").textContent = String(Math.floor(minutes/60)%24).padStart(2,"0") + ":" + String(minutes%60).padStart(2,"0") + "  $" + cash;
   }

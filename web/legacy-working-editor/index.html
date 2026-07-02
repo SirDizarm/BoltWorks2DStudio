@@ -108,6 +108,25 @@
         <label>Ground height <span id="groundValue"></span>
           <input id="groundHeight" type="range" min="80" max="300">
         </label>
+
+        <h2>Weather</h2>
+        <p class="hint">Scene weather is saved with the project. Later systems can use this for wet batteries, circuits, storm finds, and boss reactions.</p>
+        <label>Current weather
+          <select id="weatherCurrent">
+            <option value="clear">Clear</option>
+            <option value="rain">Rain</option>
+            <option value="snow">Snow</option>
+            <option value="storm">Storm</option>
+            <option value="fog">Fog</option>
+          </select>
+        </label>
+        <label>Weather intensity <span id="weatherIntensityValue">45%</span>
+          <input id="weatherIntensity" type="range" min="0" max="100" step="1" value="45">
+        </label>
+        <input id="weatherIntensityExact" type="number" min="0" max="100" step="1" value="45">
+        <label class="check"><input id="weatherDailyChange" type="checkbox"> Weather can change between days</label>
+        <label class="check"><input id="weatherOutdoorDamage" type="checkbox"> Wet weather can affect outdoor items</label>
+        <label class="check"><input id="weatherStormFinds" type="checkbox"> Storms can create random finds</label>
         <h2>Game rules / Assist mode</h2>
         <p class="hint">Optional player-friendly switches. These are saved in the project and exported with the game.</p>
         <label class="check"><input id="assistEnabled" type="checkbox"> Enable Assist Mode</label>
@@ -116,6 +135,7 @@
         <label class="check"><input id="assistNoToolBreakage" type="checkbox"> No unlucky tool breakage</label>
         <label class="check"><input id="assistInstantActions" type="checkbox"> Instant work actions</label>
         <label class="check"><input id="assistShowInteractionZones" type="checkbox"> Show interaction / hit zones</label>
+        <label class="check"><input id="assistAlwaysClearWeather" type="checkbox"> Always clear weather</label>
         <label>Time speed <span id="assistTimeSpeedValue">1x</span>
           <input id="assistTimeSpeed" type="range" min="0" max="8" step="0.1" value="1">
         </label>
