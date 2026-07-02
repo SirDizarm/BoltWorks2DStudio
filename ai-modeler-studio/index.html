@@ -4099,28 +4099,65 @@
         pushTri(a, c, d);
       };
       const v = (x, y, z, u, vv) => ({ p: point(x, y, z), uv: [u, vv] });
-      for (let y = 0; y < gridY; y++) {
-        for (let z = 0; z < gridZ; z++) {
-          for (let x = 0; x < gridX; x++) {
-            if (!isVoxel(x, y, z)) continue;
-            const u0 = x / gridX;
-            const u1 = (x + 1) / gridX;
-            const v0 = 1 - y / gridY;
-            const v1 = 1 - (y + 1) / gridY;
-            if (!isVoxel(x, y, z - 1)) pushQuad(v(x, y, z, u0, v0), v(x + 1, y, z, u1, v0), v(x + 1, y + 1, z, u1, v1), v(x, y + 1, z, u0, v1));
-            if (!isVoxel(x, y, z + 1)) pushQuad(v(x, y, z + 1, u0, v0), v(x, y + 1, z + 1, u0, v1), v(x + 1, y + 1, z + 1, u1, v1), v(x + 1, y, z + 1, u1, v0));
-            if (!isVoxel(x - 1, y, z)) pushQuad(v(x, y, z, 0, v0), v(x, y + 1, z, 0, v1), v(x, y + 1, z + 1, 1, v1), v(x, y, z + 1, 1, v0));
-            if (!isVoxel(x + 1, y, z)) pushQuad(v(x + 1, y, z, 0, v0), v(x + 1, y, z + 1, 1, v0), v(x + 1, y + 1, z + 1, 1, v1), v(x + 1, y + 1, z, 0, v1));
-            if (!isVoxel(x, y - 1, z)) pushQuad(v(x, y, z, u0, 0), v(x, y, z + 1, u0, 1), v(x + 1, y, z + 1, u1, 1), v(x + 1, y, z, u1, 0));
-            if (!isVoxel(x, y + 1, z)) pushQuad(v(x, y + 1, z, u0, 0), v(x + 1, y + 1, z, u1, 0), v(x + 1, y + 1, z + 1, u1, 1), v(x, y + 1, z + 1, u0, 1));
+      const greedyPlane = (w, h, isFilled, pushRect) => {
+        const used = new Uint8Array(w * h);
+        for (let yy = 0; yy < h; yy++) {
+          for (let xx = 0; xx < w; xx++) {
+            const start = yy * w + xx;
+            if (used[start] || !isFilled(xx, yy)) continue;
+            let rectW = 1;
+            while (xx + rectW < w && !used[yy * w + xx + rectW] && isFilled(xx + rectW, yy)) rectW++;
+            let rectH = 1;
+            outer: while (yy + rectH < h) {
+              for (let rx = 0; rx < rectW; rx++) {
+                const index = (yy + rectH) * w + xx + rx;
+                if (used[index] || !isFilled(xx + rx, yy + rectH)) break outer;
+              }
+              rectH++;
+            }
+            for (let ry = 0; ry < rectH; ry++) {
+              for (let rx = 0; rx < rectW; rx++) used[(yy + ry) * w + xx + rx] = 1;
+            }
+            pushRect(xx, yy, rectW, rectH);
           }
         }
+      };
+      let mergedFaceCount = 0;
+      for (let z = 0; z < gridZ; z++) {
+        greedyPlane(gridX, gridY, (x, y) => isVoxel(x, y, z) && !isVoxel(x, y, z - 1), (x, y, w, h) => {
+          mergedFaceCount++;
+          pushQuad(v(x, y, z, x / gridX, 1 - y / gridY), v(x + w, y, z, (x + w) / gridX, 1 - y / gridY), v(x + w, y + h, z, (x + w) / gridX, 1 - (y + h) / gridY), v(x, y + h, z, x / gridX, 1 - (y + h) / gridY));
+        });
+        greedyPlane(gridX, gridY, (x, y) => isVoxel(x, y, z) && !isVoxel(x, y, z + 1), (x, y, w, h) => {
+          mergedFaceCount++;
+          pushQuad(v(x, y, z + 1, x / gridX, 1 - y / gridY), v(x, y + h, z + 1, x / gridX, 1 - (y + h) / gridY), v(x + w, y + h, z + 1, (x + w) / gridX, 1 - (y + h) / gridY), v(x + w, y, z + 1, (x + w) / gridX, 1 - y / gridY));
+        });
+      }
+      for (let x = 0; x < gridX; x++) {
+        greedyPlane(gridZ, gridY, (z, y) => isVoxel(x, y, z) && !isVoxel(x - 1, y, z), (z, y, w, h) => {
+          mergedFaceCount++;
+          pushQuad(v(x, y, z, z / gridZ, 1 - y / gridY), v(x, y + h, z, z / gridZ, 1 - (y + h) / gridY), v(x, y + h, z + w, (z + w) / gridZ, 1 - (y + h) / gridY), v(x, y, z + w, (z + w) / gridZ, 1 - y / gridY));
+        });
+        greedyPlane(gridZ, gridY, (z, y) => isVoxel(x, y, z) && !isVoxel(x + 1, y, z), (z, y, w, h) => {
+          mergedFaceCount++;
+          pushQuad(v(x + 1, y, z, z / gridZ, 1 - y / gridY), v(x + 1, y, z + w, (z + w) / gridZ, 1 - y / gridY), v(x + 1, y + h, z + w, (z + w) / gridZ, 1 - (y + h) / gridY), v(x + 1, y + h, z, z / gridZ, 1 - (y + h) / gridY));
+        });
+      }
+      for (let y = 0; y < gridY; y++) {
+        greedyPlane(gridX, gridZ, (x, z) => isVoxel(x, y, z) && !isVoxel(x, y - 1, z), (x, z, w, h) => {
+          mergedFaceCount++;
+          pushQuad(v(x, y, z, x / gridX, z / gridZ), v(x, y, z + h, x / gridX, (z + h) / gridZ), v(x + w, y, z + h, (x + w) / gridX, (z + h) / gridZ), v(x + w, y, z, (x + w) / gridX, z / gridZ));
+        });
+        greedyPlane(gridX, gridZ, (x, z) => isVoxel(x, y, z) && !isVoxel(x, y + 1, z), (x, z, w, h) => {
+          mergedFaceCount++;
+          pushQuad(v(x, y + 1, z, x / gridX, z / gridZ), v(x + w, y + 1, z, (x + w) / gridX, z / gridZ), v(x + w, y + 1, z + h, (x + w) / gridX, (z + h) / gridZ), v(x, y + 1, z + h, x / gridX, (z + h) / gridZ));
+        });
       }
       if (positions.length < 9) throw new Error("No sheet foreground was found. Try Threshold or Dark foreground.");
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetVoxelHull", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, depth, back, voxelCount, viewRects }
+        meta: { mode: "viewSheetVoxelHullGreedy", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, depth, back, voxelCount, mergedFaceCount, viewRects }
       };
     }
 
