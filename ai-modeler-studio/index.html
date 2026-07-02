@@ -1321,8 +1321,15 @@
         </div>
         <div class="compact-row">
           <label style="flex:1">Smooth <input id="reliefSmoothInput" type="number" min="0" max="8" step="1" value="2" /></label>
+          <label style="flex:1">Source mode
+            <select id="reliefSourceModeInput">
+              <option value="single">Single height image</option>
+              <option value="sheet">View sheet to one model</option>
+            </select>
+          </label>
           <label class="toggle-chip" title="Use this when your object is dark on a light background"><input id="reliefDarkForegroundInput" type="checkbox" /> <span>Dark foreground</span></label>
         </div>
+        <p class="api-note">Sheet mode detects the main left / middle / right silhouettes and uses them as front, side, and back measurements for one joined mesh instead of separate flat models.</p>
         <button id="createReliefMeshBtn" type="button" title="Generate an editable mesh from the loaded image height map">Create relief mesh</button>
         </div>
       </section>
@@ -1844,6 +1851,7 @@
       reliefBackInput: document.querySelector("#reliefBackInput"),
       reliefThresholdInput: document.querySelector("#reliefThresholdInput"),
       reliefSmoothInput: document.querySelector("#reliefSmoothInput"),
+      reliefSourceModeInput: document.querySelector("#reliefSourceModeInput"),
       reliefDarkForegroundInput: document.querySelector("#reliefDarkForegroundInput"),
       createReliefMeshBtn: document.querySelector("#createReliefMeshBtn"),
       saveFrontPngBtn: document.querySelector("#saveFrontPngBtn"),
@@ -3881,6 +3889,187 @@
       return current;
     }
 
+
+    function reliefForegroundCheck(pixel, threshold, darkForeground) {
+      return pixel.a > 24 && (darkForeground ? pixel.luma <= threshold : pixel.luma >= threshold);
+    }
+
+    function detectReliefViewRects(imageData, threshold, darkForeground) {
+      const { width, height, data } = imageData;
+      const columnHits = new Array(width).fill(0);
+      const rowHits = new Array(height).fill(0);
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const i = (y * width + x) * 4;
+          const a = data[i + 3] ?? 255;
+          if (a <= 24) continue;
+          const luma = data[i] * .2126 + data[i + 1] * .7152 + data[i + 2] * .0722;
+          const hit = darkForeground ? luma <= threshold : luma >= threshold;
+          if (!hit) continue;
+          columnHits[x]++;
+          rowHits[y]++;
+        }
+      }
+      const minColumnHits = Math.max(2, Math.floor(height * .015));
+      const rawRuns = [];
+      let runStart = -1;
+      for (let x = 0; x <= width; x++) {
+        const active = x < width && columnHits[x] >= minColumnHits;
+        if (active && runStart < 0) runStart = x;
+        if ((!active || x === width) && runStart >= 0) {
+          if (x - runStart >= Math.max(8, width * .025)) rawRuns.push({ x: runStart, right: x - 1 });
+          runStart = -1;
+        }
+      }
+      const mergedRuns = [];
+      for (const run of rawRuns) {
+        const prev = mergedRuns[mergedRuns.length - 1];
+        if (prev && run.x - prev.right < width * .035) {
+          prev.right = run.right;
+        } else {
+          mergedRuns.push({ ...run });
+        }
+      }
+      const minRowHits = Math.max(2, Math.floor(width * .004));
+      let top = 0;
+      let bottom = height - 1;
+      while (top < height - 1 && rowHits[top] < minRowHits) top++;
+      while (bottom > top && rowHits[bottom] < minRowHits) bottom--;
+      const padX = Math.max(2, Math.round(width * .01));
+      const padY = Math.max(2, Math.round(height * .015));
+      const runs = mergedRuns
+        .map(run => ({
+          x: Math.max(0, run.x - padX),
+          y: Math.max(0, top - padY),
+          w: Math.min(width - Math.max(0, run.x - padX), run.right - run.x + 1 + padX * 2),
+          h: Math.min(height - Math.max(0, top - padY), bottom - top + 1 + padY * 2)
+        }))
+        .filter(rect => rect.w > 8 && rect.h > 8)
+        .sort((a, b) => a.x - b.x);
+      if (runs.length >= 3) return [runs[0], runs[Math.floor(runs.length / 2)], runs[runs.length - 1]];
+      if (runs.length === 2) return [runs[0], runs[1], runs[0]];
+      return [
+        { x: 0, y: 0, w: Math.floor(width / 3), h: height },
+        { x: Math.floor(width / 3), y: 0, w: Math.floor(width / 3), h: height },
+        { x: Math.floor(width * 2 / 3), y: 0, w: width - Math.floor(width * 2 / 3), h: height }
+      ];
+    }
+
+    function buildReliefViewProfile(imageData, rect, rows, threshold, darkForeground) {
+      const profile = [];
+      for (let y = 0; y < rows; y++) {
+        const sy = rect.y + (y / Math.max(1, rows - 1)) * Math.max(1, rect.h - 1);
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let lumaSum = 0;
+        let count = 0;
+        const samples = Math.max(24, Math.min(180, Math.round(rect.w)));
+        for (let x = 0; x < samples; x++) {
+          const sx = rect.x + (x / Math.max(1, samples - 1)) * Math.max(1, rect.w - 1);
+          const pixel = sampleReliefPixel(imageData, imageData.width, imageData.height, sx, sy);
+          if (!reliefForegroundCheck(pixel, threshold, darkForeground)) continue;
+          minX = Math.min(minX, x / Math.max(1, samples - 1));
+          maxX = Math.max(maxX, x / Math.max(1, samples - 1));
+          lumaSum += pixel.luma;
+          count++;
+        }
+        if (!count) {
+          profile.push({ active: false, center: .5, width: 0, luma: darkForeground ? 255 : 0 });
+        } else {
+          profile.push({
+            active: true,
+            center: (minX + maxX) * .5,
+            width: Math.max(0, maxX - minX),
+            luma: lumaSum / count
+          });
+        }
+      }
+      return profile;
+    }
+
+    function smoothReliefProfile(profile, passes) {
+      let current = profile.map(row => ({ ...row }));
+      for (let pass = 0; pass < passes; pass++) {
+        current = current.map((row, index) => {
+          let width = row.active ? row.width : 0;
+          let center = row.active ? row.center : .5;
+          let luma = row.luma;
+          let count = row.active ? 1 : 0;
+          for (const offset of [-1, 1]) {
+            const other = current[index + offset];
+            if (!other?.active) continue;
+            width += other.width;
+            center += other.center;
+            luma += other.luma;
+            count++;
+          }
+          if (!count) return { ...row, active: false };
+          return { active: true, width: width / count, center: center / count, luma: luma / count };
+        });
+      }
+      return current;
+    }
+
+    function createReliefGeometryFromViewSheet({ imageData, cols, rows, scale, depth, back, threshold, smoothPasses, darkForeground }) {
+      const viewRects = detectReliefViewRects(imageData, threshold, darkForeground);
+      const [frontRect, sideRect, backRect] = viewRects;
+      const front = smoothReliefProfile(buildReliefViewProfile(imageData, frontRect, rows, threshold, darkForeground), smoothPasses);
+      const side = smoothReliefProfile(buildReliefViewProfile(imageData, sideRect, rows, threshold, darkForeground), smoothPasses);
+      const backView = smoothReliefProfile(buildReliefViewProfile(imageData, backRect, rows, threshold, darkForeground), smoothPasses);
+      const segments = Math.max(16, Math.min(96, cols));
+      const positions = [];
+      const uvs = [];
+      const meshH = scale;
+      const meshW = scale * .42;
+      const meshD = Math.max(back, depth) * 1.7;
+      const activeAt = y => front[y].active || side[y].active || backView[y].active;
+      const rowRadius = y => {
+        const fw = front[y].active ? front[y].width : 0;
+        const bw = backView[y].active ? backView[y].width : fw;
+        const sw = side[y].active ? side[y].width : Math.max(fw, bw) * .55;
+        const luma = [front[y], side[y], backView[y]].filter(v => v.active).reduce((sum, v) => sum + v.luma, 0) / Math.max(1, [front[y], side[y], backView[y]].filter(v => v.active).length);
+        const relief = darkForeground
+          ? Math.max(0, Math.min(1, (threshold - luma) / Math.max(1, threshold)))
+          : Math.max(0, Math.min(1, (luma - threshold) / Math.max(1, 255 - threshold)));
+        return {
+          x: Math.max(.015, ((fw + bw) * .5) * meshW * (.8 + relief * .25)),
+          z: Math.max(.015, sw * meshD * (.85 + relief * .2))
+        };
+      };
+      const vertex = (x, y) => {
+        const theta = (x / segments) * Math.PI * 2;
+        const r = rowRadius(y);
+        return {
+          p: [Math.cos(theta) * r.x, (.5 - y / Math.max(1, rows - 1)) * meshH, Math.sin(theta) * r.z],
+          uv: [x / segments, 1 - y / Math.max(1, rows - 1)]
+        };
+      };
+      const pushTri = (a, b, c) => {
+        positions.push(...a.p, ...b.p, ...c.p);
+        uvs.push(...a.uv, ...b.uv, ...c.uv);
+      };
+      const pushQuad = (a, b, c, d) => {
+        pushTri(a, b, c);
+        pushTri(a, c, d);
+      };
+      for (let y = 0; y < rows - 1; y++) {
+        if (!activeAt(y) || !activeAt(y + 1)) continue;
+        for (let x = 0; x < segments; x++) {
+          const a = vertex(x, y);
+          const b = vertex(x + 1, y);
+          const c = vertex(x + 1, y + 1);
+          const d = vertex(x, y + 1);
+          pushQuad(a, d, c, b);
+        }
+      }
+      if (positions.length < 9) throw new Error("No sheet foreground was found. Try Threshold or Dark foreground.");
+      return {
+        positions,
+        uvs,
+        meta: { mode: "viewSheet", cols, rows, segments, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, depth, back, viewRects }
+      };
+    }
+
     function createReliefGeometryFromImage() {
       const imageData = reliefImageState.imageData;
       const image = reliefImageState.image;
@@ -3895,6 +4084,10 @@
       const threshold = reliefNumber(els.reliefThresholdInput, 70, 0, 255);
       const smoothPasses = Math.round(reliefNumber(els.reliefSmoothInput, 2, 0, 8));
       const darkForeground = !!els.reliefDarkForegroundInput?.checked;
+      const sourceMode = els.reliefSourceModeInput?.value || "single";
+      if (sourceMode === "sheet") {
+        return createReliefGeometryFromViewSheet({ imageData, cols, rows, scale, depth, back, threshold, smoothPasses, darkForeground });
+      }
       const aspect = sourceW / Math.max(1, sourceH);
       const meshH = scale;
       const meshW = scale * aspect;
@@ -3962,7 +4155,7 @@
       return {
         positions,
         uvs,
-        meta: { cols, rows, sourceW, sourceH, threshold, darkForeground, smoothPasses, depth, back }
+        meta: { mode: "single", cols, rows, sourceW, sourceH, threshold, darkForeground, smoothPasses, depth, back }
       };
     }
 
