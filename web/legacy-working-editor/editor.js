@@ -2021,6 +2021,11 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   $("#addAssets").onclick = () => $("#assetFiles").click();
   $("#assetFiles").addEventListener("change", async event => {
     for (const file of event.target.files) {
+      if (/\.(bolt2d|json)$/i.test(file.name) || file.type === "application/json") {
+        const text = await fileToText(file);
+        const imported = importBolt2dPackage(text, file.name);
+        if (imported) continue;
+      }
       const src = await fileToDataUrl(file);
       const asset = { id: uid(), name: file.name, src, category: assetLibraryCategory === "all" ? "working" : assetLibraryCategory };
       project.assets.push(asset);
@@ -2038,7 +2043,81 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       reader.readAsDataURL(file);
     });
   }
-  $("#assetGrid").addEventListener("click", event => {
+  function fileToText(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
+  }
+
+  function importBolt2dPackage(rawText, fallbackName = "boltworks-2d.bolt2d") {
+    let pack = null;
+    try {
+      pack = JSON.parse(String(rawText || "{}"));
+    } catch (error) {
+      return false;
+    }
+    if (pack?.kind !== "boltworks-3d-to-2d-sprite-package") return false;
+    const canvas = pack.canvas || {};
+    const width = Math.max(1, Math.round(Number(canvas.width) || 640));
+    const height = Math.max(1, Math.round(Number(canvas.height) || 360));
+    const baseName = (pack.source?.projectName || fallbackName || "boltworks-2d").replace(/\.(bolt2d|json)$/i, "");
+    const baseSrc = pack.composite?.dataUrl || transparentAssetCanvasSrc(width, height);
+    const asset = {
+      id: uid(),
+      name: `${baseName}-3d2d.png`,
+      src: baseSrc,
+      category: assetLibraryCategory === "all" ? "working" : assetLibraryCategory,
+      layeredSource: {
+        version: 1,
+        width,
+        height,
+        sourceKind: pack.kind,
+        sourceFacing: pack.authoring?.facing || "right",
+        layers: (Array.isArray(pack.layers) ? pack.layers : []).map((layer, index) => ({
+          id: uid(),
+          name: layer.name || `3D layer ${index + 1}`,
+          src: layer.dataUrl,
+          x: 0,
+          y: 0,
+          sourceW: width,
+          sourceH: height,
+          w: width,
+          h: height,
+          scale: 1,
+          rotation: 0,
+          visible: true,
+          linked: false,
+          sourceName: layer.fileName || layer.name || `3D layer ${index + 1}`,
+          sourceAssetId: layer.id || ""
+        })).filter(layer => layer.src)
+      },
+      bolt2dSource: {
+        version: pack.version || 1,
+        createdAt: pack.createdAt || null,
+        source: pack.source || {},
+        authoring: pack.authoring || {},
+        sceneBounds: pack.sceneBounds || null
+      }
+    };
+    project.assets.push(asset);
+    selectedAssetId = asset.id;
+    selectedAssetLayerId = asset.layeredSource.layers[0]?.id || null;
+    const img = new Image();
+    img.onload = refreshAssetViews;
+    img.src = asset.src;
+    images.set(asset.id, img);
+    floatingPasteLayer = null;
+    hydrateAssetLayers(asset);
+    floatingPasteLayer = asset.layeredSource.layers.find(layer => layer.id === selectedAssetLayerId) || null;
+    assetMoveLayerMode = !!floatingPasteLayer;
+    assetWarpMode = false;
+    assetWarpHandle = null;
+    updateSelectionDetails(`Imported Bolt 2D package with ${asset.layeredSource.layers.length} editable layer${asset.layeredSource.layers.length === 1 ? "" : "s"}.`);
+    return true;
+  }  $("#assetGrid").addEventListener("click", event => {
     const deleteButton = event.target.closest("[data-delete-asset]");
     if (deleteButton) {
       deleteAssetById(deleteButton.dataset.deleteAsset);

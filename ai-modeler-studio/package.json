@@ -1,0 +1,13 @@
+{
+  "name": "model-studio-3d",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node tools/server.mjs",
+    "check": "node tools/smoke-check.mjs"
+  },
+  "dependencies": {
+    "three": "0.165.0"
+  }
+}
