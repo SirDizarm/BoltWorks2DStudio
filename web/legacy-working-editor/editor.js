@@ -36,10 +36,56 @@
   const assetCategories = ["working", "character", "world", "object", "part", "scene", "inventory"];
   const assetCategoryLabels = { working: "Working", character: "Character", world: "World", object: "Objects", part: "Parts", scene: "Scenes", inventory: "Inventory" };
 
+  function defaultGameRules() {
+    return {
+      mode: "normal",
+      assist: {
+        enabled: false,
+        pauseTime: false,
+        noAccidents: false,
+        noToolBreakage: false,
+        instantActions: false,
+        timeSpeed: 1,
+        moneyMultiplier: 1,
+        showInteractionZones: false
+      }
+    };
+  }
+
+  function normalizeGameRules(rules = {}) {
+    const defaults = defaultGameRules();
+    const assist = { ...defaults.assist, ...(rules.assist || {}) };
+    assist.enabled = !!assist.enabled;
+    assist.pauseTime = !!assist.pauseTime;
+    assist.noAccidents = !!assist.noAccidents;
+    assist.noToolBreakage = !!assist.noToolBreakage;
+    assist.instantActions = !!assist.instantActions;
+    assist.showInteractionZones = !!assist.showInteractionZones;
+    assist.timeSpeed = clamp(Number(assist.timeSpeed) || 1, 0, 8);
+    assist.moneyMultiplier = clamp(Number(assist.moneyMultiplier) || 1, 0, 20);
+    return { ...defaults, ...rules, mode: rules.mode || defaults.mode, assist };
+  }
+
+  function assistRules() {
+    project.gameRules = normalizeGameRules(project.gameRules);
+    return project.gameRules.assist;
+  }
+
+  function gameClockScale() {
+    const assist = assistRules();
+    if (!assist.enabled) return 1;
+    return assist.pauseTime ? 0 : clamp(Number(assist.timeSpeed) || 1, 0, 8);
+  }
+  function accidentsAllowed() { const assist = assistRules(); return !(assist.enabled && assist.noAccidents); }
+  function toolBreakageAllowed() { const assist = assistRules(); return !(assist.enabled && assist.noToolBreakage); }
+  function actionDurationScale() { const assist = assistRules(); return assist.enabled && assist.instantActions ? 0 : 1; }
+  function assistMoneyMultiplier() { const assist = assistRules(); return assist.enabled ? clamp(Number(assist.moneyMultiplier) || 1, 0, 20) : 1; }
+  function shouldShowInteractionZones() { const assist = assistRules(); return !!(assist.enabled && assist.showInteractionZones); }
   const starterProject = () => ({
     version: 1,
     name: "My Scrapyard Story",
     world: { width: 5200, height: 720, groundHeight: 150 },
+    gameRules: defaultGameRules(),
     layers: [
       { id: "background", name: "Sky / fixed background", parallax: 0, visible: true, color: "#7d908b" },
       { id: "far", name: "Far scenery", parallax: 0.18, visible: true, color: "#66756b" },
@@ -301,6 +347,7 @@
     return {
       ...base, ...data,
       world: { ...base.world, ...(data.world || {}) },
+      gameRules: normalizeGameRules(data.gameRules || base.gameRules),
       scenes,
       player: { ...base.player, ...(data.player || {}) },
       activeSceneId,
@@ -560,6 +607,24 @@
     return sceneObjects().filter(object => object.visible !== false && object.layer === layer.id && object.type === "trigger" && !!object.alwaysOnTop === alwaysOnTop);
   }
 
+
+  function drawInteractionZoneOverlay(ctx, viewX) {
+    if (!shouldShowInteractionZones()) return;
+    ctx.save();
+    ctx.translate(-viewX, 0);
+    ctx.lineWidth = 2;
+    sceneObjects().forEach(object => {
+      if (object.visible === false) return;
+      const isDanger = object.type === "bus";
+      const isInteraction = object.type === "trigger" || object.action || object.type === "car" || object.type === "car_model";
+      if (!isDanger && !isInteraction) return;
+      ctx.fillStyle = isDanger ? "rgba(255,90,60,.16)" : "rgba(255,209,90,.14)";
+      ctx.strokeStyle = isDanger ? "rgba(255,90,60,.78)" : "rgba(255,209,90,.78)";
+      ctx.fillRect(object.x, object.y, object.w, object.h);
+      ctx.strokeRect(object.x, object.y, object.w, object.h);
+    });
+    ctx.restore();
+  }
   function drawWorld(ctx, canvas, viewX, viewZoom, isGame, now = 0) {
     const { width, height } = resizeCanvas(canvas);
     ctx.clearRect(0, 0, width, height);
@@ -1771,7 +1836,57 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     $("#groundValue").textContent = `${project.world.groundHeight}px`;
     $("#speedValue").textContent = `${project.player.walkSpeed}px/s`;
     $("#crawlValue").textContent = `${project.player.crawlSpeed}px/s`;
+    const assist = assistRules();
+    if ($("#assistTimeSpeedValue")) $("#assistTimeSpeedValue").textContent = assist.pauseTime ? "paused" : `${assist.timeSpeed}x`;
+    if ($("#assistMoneyMultiplierValue")) $("#assistMoneyMultiplierValue").textContent = `${assist.moneyMultiplier}x`;
   }
+
+  function syncAssistControls() {
+    const assist = assistRules();
+    const pairs = {
+      assistEnabled: assist.enabled,
+      assistPauseTime: assist.pauseTime,
+      assistNoAccidents: assist.noAccidents,
+      assistNoToolBreakage: assist.noToolBreakage,
+      assistInstantActions: assist.instantActions,
+      assistShowInteractionZones: assist.showInteractionZones
+    };
+    Object.entries(pairs).forEach(([id, value]) => { const el = $("#" + id); if (el) el.checked = !!value; });
+    [["assistTimeSpeed", assist.timeSpeed], ["assistTimeSpeedExact", assist.timeSpeed], ["assistMoneyMultiplier", assist.moneyMultiplier], ["assistMoneyMultiplierExact", assist.moneyMultiplier]].forEach(([id, value]) => { const el = $("#" + id); if (el) el.value = value; });
+    updateLabels();
+  }
+
+  function bindAssistControls() {
+    const checkMap = {
+      assistEnabled: "enabled",
+      assistPauseTime: "pauseTime",
+      assistNoAccidents: "noAccidents",
+      assistNoToolBreakage: "noToolBreakage",
+      assistInstantActions: "instantActions",
+      assistShowInteractionZones: "showInteractionZones"
+    };
+    Object.entries(checkMap).forEach(([id, key]) => {
+      const el = $("#" + id);
+      if (!el) return;
+      el.addEventListener("change", () => { assistRules()[key] = !!el.checked; updateLabels(); markDirty(); });
+    });
+    const bindNumberPair = (rangeId, exactId, key, min, max) => {
+      const range = $("#" + rangeId), exact = $("#" + exactId);
+      const apply = (value) => {
+        assistRules()[key] = clamp(Number(value) || 0, min, max);
+        if (range) range.value = assistRules()[key];
+        if (exact) exact.value = assistRules()[key];
+        updateLabels(); markDirty();
+      };
+      if (range) range.addEventListener("input", () => apply(range.value));
+      if (exact) exact.addEventListener("input", () => apply(exact.value));
+    };
+    bindNumberPair("assistTimeSpeed", "assistTimeSpeedExact", "timeSpeed", 0, 8);
+    bindNumberPair("assistMoneyMultiplier", "assistMoneyMultiplierExact", "moneyMultiplier", 0, 20);
+    syncAssistControls();
+  }
+  bindAssistControls();
+
   ["worldWidth", "groundHeight", "walkSpeed", "crawlSpeed"].forEach(id => {
     $(`#${id}`).addEventListener("input", event => {
       if (id === "worldWidth") project.world.width = +event.target.value;
@@ -5513,9 +5628,21 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   const keys = new Set();
   const images = new Map();
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+  const baseGameRules = { mode:"normal", assist:{ enabled:false, pauseTime:false, noAccidents:false, noToolBreakage:false, instantActions:false, timeSpeed:1, moneyMultiplier:1, showInteractionZones:false } };
+  const gameRules = { ...baseGameRules, ...(project.gameRules || {}), assist:{ ...baseGameRules.assist, ...((project.gameRules || {}).assist || {}) } };
+  const rules = {
+    assistEnabled: () => !!gameRules.assist.enabled,
+    timeScale: () => gameRules.assist.enabled ? (gameRules.assist.pauseTime ? 0 : clamp(Number(gameRules.assist.timeSpeed) || 1, 0, 8)) : 1,
+    canAccidentHappen: () => !(gameRules.assist.enabled && gameRules.assist.noAccidents),
+    canToolBreak: () => !(gameRules.assist.enabled && gameRules.assist.noToolBreakage),
+    actionTimeScale: () => gameRules.assist.enabled && gameRules.assist.instantActions ? 0 : 1,
+    moneyMultiplier: () => gameRules.assist.enabled ? clamp(Number(gameRules.assist.moneyMultiplier) || 1, 0, 20) : 1,
+    showInteractionZones: () => !!(gameRules.assist.enabled && gameRules.assist.showInteractionZones)
+  };
+  window.BoltWorksRules = rules;
   const bodyParts = ["backArm", "backLeg", "head", "torso", "frontLeg", "frontArm"];
   let activeSceneId = project.activeSceneId || project.scenes?.[0]?.id || "main";
-  let cameraX = 0, last = performance.now(), elapsed = 0, dialogueUntil = 0, cash = 0;
+  let cameraX = 0, last = performance.now(), elapsed = 0, clockElapsed = 0, dialogueUntil = 0, cash = 0;
   let player = { x: project.player?.spawnX || 120, y: 0, facing: 1, walking:false, crawling:false, knocked:false, hidden:false, fallAt:0 };
   const busState = new Map();
   const removedCarParts = new Map();
@@ -5596,7 +5723,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   function busBlocksPlayerAt(bus, x) { const st = stateForBus(bus); const moving = st.departed || Number.isFinite(st.startedAt) || rawBusProgress(bus) >= 0; if (!moving || busProgress(bus) >= 1) return false; return player.y >= bus.y - 20 && player.y <= bus.y + bus.h + 30 && x + 24 >= bus.x && x - 24 <= bus.x + bus.w; }
   function blockedByMovingBus(nextX, currentX) { return sceneObjects().some(o => { if (o.visible === false || o.type !== "bus") return false; if (!busBlocksPlayerAt(o, nextX)) return false; if (!busBlocksPlayerAt(o, currentX)) return true; const center = o.x + o.w / 2; return Math.abs(nextX - center) <= Math.abs(currentX - center); }); }
   function startBus(bus) { const st = stateForBus(bus); if (!st.departed) { st.departed = true; st.startedAt = elapsed; playLoopingSound("bus-engine-" + bus.id, bus.engineSound || "soundAssets/bus_idle.mp3"); spawnBusGust(bus, true); } }
-  function forceBusRunOver(bus) { const st = stateForBus(bus); st.departed = true; st.runningOver = true; st.startedAt = elapsed; player.knocked = true; player.fallAt = elapsed; setTimeout(() => { player.hidden = true; }, 420); playLoopingSound("bus-engine-" + bus.id, bus.engineSound || "soundAssets/bus_idle.mp3"); spawnBusGust(bus, true); }
+  function forceBusRunOver(bus) { if (!rules.canAccidentHappen("bus")) { startBus(bus); return; } const st = stateForBus(bus); st.departed = true; st.runningOver = true; st.startedAt = elapsed; player.knocked = true; player.fallAt = elapsed; setTimeout(() => { player.hidden = true; }, 420); playLoopingSound("bus-engine-" + bus.id, bus.engineSound || "soundAssets/bus_idle.mp3"); spawnBusGust(bus, true); }
   function honk(bus) { honkBusId = bus.id; if (elapsed - lastHornAt >= 1.15) { if (honkTextureId) bus.honkAssetId = honkTextureId; honkFlashUntil = elapsed + .38; playSound(bus.honkSound || "soundAssets/bus_horn.mp3"); lastHornAt = elapsed; } }
   function updateBusHazards() {
     for (const bus of sceneObjects().filter(o => o.type === "bus" && o.visible !== false)) {
@@ -5607,7 +5734,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       if (progress >= 1 && blockedBusId !== bus.id) continue;
       if (blockedBusId !== bus.id) { blockedBusId = bus.id; blockStartedAt = elapsed; lastHornAt = -999; }
       honk(bus);
-      if (elapsed - blockStartedAt >= (Number(bus.busRunOverAfter) || 7)) { blockedBusId = null; forceBusRunOver(bus); blockStartedAt = 0; honkBusId = null; setTimeout(() => goToScene("hospital", "You wake up at the hospital."), 900); }
+      if (elapsed - blockStartedAt >= (Number(bus.busRunOverAfter) || 7)) { blockedBusId = null; forceBusRunOver(bus); blockStartedAt = 0; honkBusId = null; if (rules.canAccidentHappen("bus")) setTimeout(() => goToScene("hospital", "You wake up at the hospital."), 900); }
       break;
     }
   }
@@ -5681,17 +5808,33 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     cameraX = clamp(player.x - innerWidth*.45, 0, Math.max(0, (project.world.width || 5000) - innerWidth));
     if (dialogueUntil && elapsed > dialogueUntil) document.getElementById("dialogue").style.display="none";
   }
+  function drawAssistZones() {
+    if (!rules.showInteractionZones()) return;
+    ctx.save();
+    ctx.translate(-cameraX, 0);
+    ctx.lineWidth = 2;
+    for (const object of sceneObjects()) {
+      const isDanger = object.type === "bus";
+      const isInteraction = object.type === "trigger" || object.action || object.type === "car" || object.type === "car_model";
+      if (!isDanger && !isInteraction) continue;
+      ctx.fillStyle = isDanger ? "rgba(255,90,60,.16)" : "rgba(255,209,90,.14)";
+      ctx.strokeStyle = isDanger ? "rgba(255,90,60,.78)" : "rgba(255,209,90,.78)";
+      ctx.fillRect(object.x, object.y, object.w, object.h);
+      ctx.strokeRect(object.x, object.y, object.w, object.h);
+    }
+    ctx.restore();
+  }
   function draw() {
     const scale = canvas.height / (project.world.height || 720); const viewportW = canvas.width / scale;
     ctx.clearRect(0,0,canvas.width,canvas.height); ctx.save(); ctx.scale(scale,scale);
     const sky = ctx.createLinearGradient(0,0,0,project.world.height||720); sky.addColorStop(0,"#7d918e"); sky.addColorStop(.7,"#b3aa8b"); sky.addColorStop(1,"#76705a"); ctx.fillStyle=sky; ctx.fillRect(0,0,viewportW,project.world.height||720);
     for (const layer of visibleLayers()) { ctx.save(); const off = cameraX*(layer.parallax||1); ctx.translate(-off,0); drawLayerBackdrop(layer,cameraX,viewportW); sceneObjects().filter(o => o.layer === layer.id && !o.alwaysOnTop).forEach(drawObject); ctx.restore(); }
     for (const layer of visibleLayers()) { ctx.save(); const off = cameraX*(layer.parallax||1); ctx.translate(-off,0); sceneObjects().filter(o => o.layer === layer.id && o.alwaysOnTop).forEach(drawObject); ctx.restore(); }
-    ctx.save(); ctx.translate(-cameraX,0); particles.forEach(p => { const t=clamp(p.age/p.life,0,1); ctx.globalAlpha=(1-t)*.42; ctx.fillStyle="#d8c99e"; ctx.beginPath(); ctx.ellipse(p.x,p.y,p.size*(1+t),p.size*.45,0,0,Math.PI*2); ctx.fill(); }); drawPlayer(); ctx.restore(); ctx.restore();
+    ctx.save(); ctx.translate(-cameraX,0); particles.forEach(p => { const t=clamp(p.age/p.life,0,1); ctx.globalAlpha=(1-t)*.42; ctx.fillStyle="#d8c99e"; ctx.beginPath(); ctx.ellipse(p.x,p.y,p.size*(1+t),p.size*.45,0,0,Math.PI*2); ctx.fill(); }); drawAssistZones(); drawPlayer(); ctx.restore(); ctx.restore();
     document.getElementById("sceneName").textContent = (scene().name || "Scene") + (near ? " · E: " + (near.prompt || near.name || "Interact") : "");
-    const minutes = Math.floor(7*60 + elapsed*8); document.getElementById("clock").textContent = String(Math.floor(minutes/60)%24).padStart(2,"0") + ":" + String(minutes%60).padStart(2,"0") + "  $" + cash;
+    const minutes = Math.floor(7*60 + clockElapsed*8); document.getElementById("clock").textContent = String(Math.floor(minutes/60)%24).padStart(2,"0") + ":" + String(minutes%60).padStart(2,"0") + "  $" + cash;
   }
-  function loop(now){ const dt=Math.min(.04,(now-last)/1000||0); last=now; elapsed+=dt; update(dt); draw(); requestAnimationFrame(loop); }
+  function loop(now){ const dt=Math.min(.04,(now-last)/1000||0); last=now; elapsed+=dt; clockElapsed+=dt*rules.timeScale(); update(dt); draw(); requestAnimationFrame(loop); }
   requestAnimationFrame(loop);
 })();
   <\/script>
@@ -5983,7 +6126,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     project.character = normalizeCharacter(project.character, project.rig);
     rebuildImages(); renderScenes(); renderLayers(); renderAssets(); renderSceneArtControls(); renderRig(); renderInspector(); renderOutliner(); renderCarModels();
     $("#worldWidth").value = project.world.width; $("#groundHeight").value = project.world.groundHeight;
-    $("#walkSpeed").value = project.player.walkSpeed; $("#crawlSpeed").value = project.player.crawlSpeed; updateLabels();
+    $("#walkSpeed").value = project.player.walkSpeed; $("#crawlSpeed").value = project.player.crawlSpeed; syncAssistControls(); updateLabels();
     if ($("#characterAnimator").classList.contains("active")) renderCharacterAnimator();
     if ($("#carBuilder")?.classList.contains("active")) renderCarBuilder();
   }
@@ -6195,7 +6338,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     });
     playing = true;
     const spawn = playerStartForScene();
-    game = { x: spawn ? spawn.x + spawn.w / 2 : project.player.spawnX, y: project.world.height - project.world.groundHeight, cameraX: 0, facing: 1, crawling: false, near: null, dialogue: false, cash: 0, elapsed: 0, completed: new Set(), honkBusId: null, honkUntil: 0, honkFlashUntil: 0, blockedBusId: null, blockStartedAt: 0, lastHornAt: -999, hospitalized: false, playerKnockedDown: false, playerHidden: false, playerFallStartedAt: 0, hiddenObject: null, scriptState: {}, scriptErrors: {}, removedCarParts: new Map() };
+    game = { x: spawn ? spawn.x + spawn.w / 2 : project.player.spawnX, y: project.world.height - project.world.groundHeight, cameraX: 0, facing: 1, crawling: false, near: null, dialogue: false, cash: 0, elapsed: 0, clockElapsed: 0, completed: new Set(), honkBusId: null, honkUntil: 0, honkFlashUntil: 0, blockedBusId: null, blockStartedAt: 0, lastHornAt: -999, hospitalized: false, playerKnockedDown: false, playerHidden: false, playerFallStartedAt: 0, hiddenObject: null, scriptState: {}, scriptErrors: {}, removedCarParts: new Map() };
     unlockBusHornAudio();
     sceneObjects().filter(o => o.visible !== false && o.type === "bus").forEach(bus => playBusEngine(bus.engineSound || "soundAssets/bus_idle.mp3"));
     $("#playOverlay").classList.add("active");
@@ -6425,6 +6568,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
         game.lastHornAt = game.elapsed;
       }
       if (game.elapsed - game.blockStartedAt >= (Number(bus.busRunOverAfter) || 7)) {
+        if (!accidentsAllowed()) { startBusDepart(bus, state); game.blockedBusId = null; game.blockStartedAt = 0; game.honkBusId = null; game.honkUntil = 0; game.honkFlashUntil = 0; break; }
         game.playerKnockedDown = true;
         game.playerFallStartedAt = game.elapsed;
         state.runningOverPlayer = true;
@@ -6474,6 +6618,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       if (!blockedByBus) game.x = nextX;
       game.walking = !!direction && !blockedByBus;
       game.elapsed += dt;
+      game.clockElapsed += dt * gameClockScale();
       runObjectScripts(dt);
       updateBusHazards();
       updateBusEffects(dt);
@@ -6484,7 +6629,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     drawWorld(gctx, gameCanvas, game.cameraX, 1, true, game.elapsed * 1000);
     drawPlayer(gctx, game.x - game.cameraX, game.y, now);
     findInteraction();
-    const minutes = 6 * 60 + 52 + Math.floor(game.elapsed * 2);
+    const minutes = 6 * 60 + 52 + Math.floor((game.clockElapsed ?? game.elapsed) * 2);
     $("#gameTime").textContent = `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
     $("#gameCash").textContent = game.cash;
     gameFrame = requestAnimationFrame(gameLoop);
