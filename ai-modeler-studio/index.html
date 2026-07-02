@@ -4133,7 +4133,31 @@
         pushTri(a, b, c);
         pushTri(a, c, d);
       };
-      const v = (x, y, z, u, vv) => ({ p: point(x, y, z), uv: [u, vv] });
+      const detailStrength = Math.min(.22, Math.max(.04, depth * .12));
+      const detailFromPixel = pixel => {
+        const raw = darkForeground
+          ? (threshold - pixel.luma) / Math.max(1, threshold)
+          : (pixel.luma - threshold) / Math.max(1, 255 - threshold);
+        return Math.max(-1, Math.min(1, raw * 2 - .65));
+      };
+      const displacePoint = (p, direction, amount) => [
+        p[0] + direction[0] * amount,
+        p[1] + direction[1] * amount,
+        p[2] + direction[2] * amount
+      ];
+      const detailVertex = (x, y, z, u, vv, view, direction) => {
+        const base = point(x, y, z);
+        let pixel;
+        if (view === "front") pixel = sampleRect(frontRect, x / gridX, y / gridY);
+        else if (view === "back") pixel = sampleRect(backRect, 1 - x / gridX, y / gridY);
+        else pixel = sampleRect(sideRect, z / gridZ, y / gridY);
+        const amount = detailFromPixel(pixel) * detailStrength;
+        return { p: displacePoint(base, direction, amount), uv: [u, vv] };
+      };
+      const v = (x, y, z, u, vv, view = "none", direction = [0, 0, 0]) => {
+        if (view !== "none") return detailVertex(x, y, z, u, vv, view, direction);
+        return { p: point(x, y, z), uv: [u, vv] };
+      };
       const polishLevel = Math.max(0, smoothPasses - 2);
       const maxPatchSpan = polishLevel > 0 ? Math.max(2, 8 - polishLevel) : Infinity;
       const mix = (a, b, t) => a + (b - a) * t;
@@ -4247,21 +4271,21 @@
       for (let z = 0; z < gridZ; z++) {
         greedyPlane(gridX, gridY, (x, y) => isVoxel(x, y, z) && !isVoxel(x, y, z - 1), (x, y, w, h) => {
           mergedFaceCount++;
-          pushQuadPatch(v(x, y, z, x / gridX, 1 - y / gridY), v(x + w, y, z, (x + w) / gridX, 1 - y / gridY), v(x + w, y + h, z, (x + w) / gridX, 1 - (y + h) / gridY), v(x, y + h, z, x / gridX, 1 - (y + h) / gridY), Math.ceil(w / maxPatchSpan), Math.ceil(h / maxPatchSpan));
+          pushQuadPatch(v(x, y, z, x / gridX, 1 - y / gridY, "front", [0, 0, -1]), v(x + w, y, z, (x + w) / gridX, 1 - y / gridY, "front", [0, 0, -1]), v(x + w, y + h, z, (x + w) / gridX, 1 - (y + h) / gridY, "front", [0, 0, -1]), v(x, y + h, z, x / gridX, 1 - (y + h) / gridY, "front", [0, 0, -1]), Math.ceil(w / maxPatchSpan), Math.ceil(h / maxPatchSpan));
         });
         greedyPlane(gridX, gridY, (x, y) => isVoxel(x, y, z) && !isVoxel(x, y, z + 1), (x, y, w, h) => {
           mergedFaceCount++;
-          pushQuadPatch(v(x, y, z + 1, x / gridX, 1 - y / gridY), v(x, y + h, z + 1, x / gridX, 1 - (y + h) / gridY), v(x + w, y + h, z + 1, (x + w) / gridX, 1 - (y + h) / gridY), v(x + w, y, z + 1, (x + w) / gridX, 1 - y / gridY), Math.ceil(h / maxPatchSpan), Math.ceil(w / maxPatchSpan));
+          pushQuadPatch(v(x, y, z + 1, x / gridX, 1 - y / gridY, "back", [0, 0, 1]), v(x, y + h, z + 1, x / gridX, 1 - (y + h) / gridY, "back", [0, 0, 1]), v(x + w, y + h, z + 1, (x + w) / gridX, 1 - (y + h) / gridY, "back", [0, 0, 1]), v(x + w, y, z + 1, (x + w) / gridX, 1 - y / gridY, "back", [0, 0, 1]), Math.ceil(h / maxPatchSpan), Math.ceil(w / maxPatchSpan));
         });
       }
       for (let x = 0; x < gridX; x++) {
         greedyPlane(gridZ, gridY, (z, y) => isVoxel(x, y, z) && !isVoxel(x - 1, y, z), (z, y, w, h) => {
           mergedFaceCount++;
-          pushQuadPatch(v(x, y, z, z / gridZ, 1 - y / gridY), v(x, y + h, z, z / gridZ, 1 - (y + h) / gridY), v(x, y + h, z + w, (z + w) / gridZ, 1 - (y + h) / gridY), v(x, y, z + w, (z + w) / gridZ, 1 - y / gridY), Math.ceil(h / maxPatchSpan), Math.ceil(w / maxPatchSpan));
+          pushQuadPatch(v(x, y, z, z / gridZ, 1 - y / gridY, "side", [-1, 0, 0]), v(x, y + h, z, z / gridZ, 1 - (y + h) / gridY, "side", [-1, 0, 0]), v(x, y + h, z + w, (z + w) / gridZ, 1 - (y + h) / gridY, "side", [-1, 0, 0]), v(x, y, z + w, (z + w) / gridZ, 1 - y / gridY, "side", [-1, 0, 0]), Math.ceil(h / maxPatchSpan), Math.ceil(w / maxPatchSpan));
         });
         greedyPlane(gridZ, gridY, (z, y) => isVoxel(x, y, z) && !isVoxel(x + 1, y, z), (z, y, w, h) => {
           mergedFaceCount++;
-          pushQuadPatch(v(x + 1, y, z, z / gridZ, 1 - y / gridY), v(x + 1, y, z + w, (z + w) / gridZ, 1 - y / gridY), v(x + 1, y + h, z + w, (z + w) / gridZ, 1 - (y + h) / gridY), v(x + 1, y + h, z, z / gridZ, 1 - (y + h) / gridY), Math.ceil(w / maxPatchSpan), Math.ceil(h / maxPatchSpan));
+          pushQuadPatch(v(x + 1, y, z, z / gridZ, 1 - y / gridY, "side", [1, 0, 0]), v(x + 1, y, z + w, (z + w) / gridZ, 1 - y / gridY, "side", [1, 0, 0]), v(x + 1, y + h, z + w, (z + w) / gridZ, 1 - (y + h) / gridY, "side", [1, 0, 0]), v(x + 1, y + h, z, z / gridZ, 1 - (y + h) / gridY, "side", [1, 0, 0]), Math.ceil(w / maxPatchSpan), Math.ceil(h / maxPatchSpan));
         });
       }
       for (let y = 0; y < gridY; y++) {
@@ -4279,7 +4303,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetOvalHullGreedyPolished", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, viewRects }
+        meta: { mode: "viewSheetOvalHullDetailPolished", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, viewRects }
       };
     }
 
