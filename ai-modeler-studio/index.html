@@ -4134,11 +4134,39 @@
         pushTri(a, c, d);
       };
       const detailStrength = Math.min(.22, Math.max(.04, depth * .12));
+      const detailContrastStrength = detailStrength * 2.8;
+      const clampDetail = amount => Math.max(-detailStrength * 2.4, Math.min(detailStrength * 1.35, amount));
       const detailFromPixel = pixel => {
         const raw = darkForeground
           ? (threshold - pixel.luma) / Math.max(1, threshold)
           : (pixel.luma - threshold) / Math.max(1, 255 - threshold);
         return Math.max(-1, Math.min(1, raw * 2 - .65));
+      };
+      const viewSampleInfo = (view, x, y, z) => {
+        if (view === "front") return { rect: frontRect, nx: x / gridX, ny: y / gridY };
+        if (view === "back") return { rect: backRect, nx: 1 - x / gridX, ny: y / gridY };
+        return { rect: sideRect, nx: z / gridZ, ny: y / gridY };
+      };
+      const detailAmountFor = (view, x, y, z) => {
+        const info = viewSampleInfo(view, x, y, z);
+        const pixel = sampleRect(info.rect, info.nx, info.ny);
+        const radiusX = view === "side" ? 1 / Math.max(12, gridZ) : 1 / Math.max(16, gridX);
+        const radiusY = 1 / Math.max(20, gridY);
+        let total = 0;
+        let count = 0;
+        for (const offset of [[-radiusX, 0], [radiusX, 0], [0, -radiusY], [0, radiusY], [-radiusX, -radiusY], [radiusX, -radiusY], [-radiusX, radiusY], [radiusX, radiusY]]) {
+          const neighbor = sampleRect(info.rect, info.nx + offset[0], info.ny + offset[1]);
+          if (neighbor.a > 24) {
+            total += neighbor.luma;
+            count++;
+          }
+        }
+        const localAverage = count ? total / count : pixel.luma;
+        const localContrast = (pixel.luma - localAverage) / 255;
+        const signedContrast = darkForeground ? -localContrast : localContrast;
+        const absoluteVolume = detailFromPixel(pixel) * detailStrength * .25;
+        const darkGrooveBoost = signedContrast < 0 ? signedContrast * detailContrastStrength * 2.15 : signedContrast * detailContrastStrength * .65;
+        return clampDetail(absoluteVolume + darkGrooveBoost);
       };
       const displacePoint = (p, direction, amount) => [
         p[0] + direction[0] * amount,
@@ -4147,11 +4175,7 @@
       ];
       const detailVertex = (x, y, z, u, vv, view, direction) => {
         const base = point(x, y, z);
-        let pixel;
-        if (view === "front") pixel = sampleRect(frontRect, x / gridX, y / gridY);
-        else if (view === "back") pixel = sampleRect(backRect, 1 - x / gridX, y / gridY);
-        else pixel = sampleRect(sideRect, z / gridZ, y / gridY);
-        const amount = detailFromPixel(pixel) * detailStrength;
+        const amount = detailAmountFor(view, x, y, z);
         return { p: displacePoint(base, direction, amount), uv: [u, vv] };
       };
       const v = (x, y, z, u, vv, view = "none", direction = [0, 0, 0]) => {
@@ -4303,7 +4327,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetOvalHullDetailPolished", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, viewRects }
+        meta: { mode: "viewSheetOvalHullDetailPolished", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, viewRects }
       };
     }
 
