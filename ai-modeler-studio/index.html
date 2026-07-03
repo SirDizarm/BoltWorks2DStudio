@@ -1190,7 +1190,7 @@
     <section class="viewport" aria-label="3D viewport">
       <canvas id="canvas"></canvas>
       <div id="selectionBox" class="selection-box"></div>
-      <div class="hud"><span class="status-dot"></span><span id="hudText">Orbit: drag | Select: click | Transform: gizmo | Relief: volume_form_zones</span></div>
+      <div class="hud"><span class="status-dot"></span><span id="hudText">Orbit: drag | Select: click | Transform: gizmo | Relief: raised_form_zones</span></div>
     </section>
 
     <aside class="panel right">
@@ -4200,14 +4200,15 @@
         }
       };
       // Guided paired form zones. The sheet image gives the silhouette; these add the missing rounded front/back masses.
-      addFormEllipsoid(.38, .36, .18, .105, .075, .16, 1);
-      addFormEllipsoid(.62, .36, .18, .105, .075, .16, 1);
-      addFormEllipsoid(.37, .62, .82, .13, .105, .19, 1);
-      addFormEllipsoid(.63, .62, .82, .13, .105, .19, 1);
-      addFormEllipsoid(.5, .43, .36, .22, .17, .10, .72);
-      addFormEllipsoid(.5, .44, .66, .22, .17, .10, .72);
-      carveFormGroove(.5, .36, .12, .026, .078, .09);
-      carveFormGroove(.5, .63, .91, .034, .13, .105);
+      // Keep these slightly high and compact: the old silhouette already supplies the lower body, so these should not become flat shelves.
+      addFormEllipsoid(.38, .315, .17, .092, .058, .145, 1);
+      addFormEllipsoid(.62, .315, .17, .092, .058, .145, 1);
+      addFormEllipsoid(.37, .555, .84, .125, .084, .175, 1);
+      addFormEllipsoid(.63, .555, .84, .125, .084, .175, 1);
+      addFormEllipsoid(.5, .385, .35, .185, .105, .075, .42);
+      addFormEllipsoid(.5, .405, .66, .185, .105, .075, .42);
+      carveFormGroove(.5, .315, .115, .024, .06, .082);
+      carveFormGroove(.5, .565, .92, .034, .095, .105);
 
       const positions = [];
       const uvs = [];
@@ -4265,18 +4266,18 @@
         const ny = y / Math.max(1, gridY);
         const centerLine = bell(nx, .5, view === "back" ? .045 : .055);
         const torsoBand = bell(ny, .43, .20);
-        const chestBand = bell(ny, .36, .075);
-        const hipBand = bell(ny, .61, .12);
+        const chestBand = bell(ny, .315, .062);
+        const hipBand = bell(ny, .555, .105);
         const upperLegBand = bell(ny, .72, .10);
         const shoulderBand = bell(ny, .27, .08);
         const backBand = view === "back" ? Math.max(torsoBand * .55, hipBand * 1.35, upperLegBand * .55) : Math.max(torsoBand * .42, hipBand * .58);
         const leftFormLobe = bell(nx, .37, .105);
         const rightFormLobe = bell(nx, .63, .105);
         const pairedLobes = Math.max(leftFormLobe, rightFormLobe);
-        const frontChestVolume = view === "front" ? pairedLobes * chestBand * formStrength * .95 : 0;
-        const frontRibVolume = view === "front" ? bell(nx, .5, .24) * torsoBand * formStrength * .18 : 0;
-        const backShoulderVolume = view === "back" ? bell(nx, .5, .34) * shoulderBand * formStrength * .25 : 0;
-        const backHipVolume = view === "back" ? pairedLobes * hipBand * formStrength * 1.05 : 0;
+        const frontChestVolume = view === "front" ? pairedLobes * chestBand * formStrength * .62 : 0;
+        const frontRibVolume = view === "front" ? bell(nx, .5, .20) * torsoBand * formStrength * .045 : 0;
+        const backShoulderVolume = view === "back" ? bell(nx, .5, .30) * shoulderBand * formStrength * .09 : 0;
+        const backHipVolume = view === "back" ? pairedLobes * hipBand * formStrength * .68 : 0;
         const centerGroove = view === "front" || view === "back" ? -centerLine * backBand * centerGrooveStrength : 0;
         const halfMode = view === "front" ? frontHalfMode : view === "back" ? backHalfMode : "full";
         const halfT = halfMode === "full" ? 1 : halfViewNx(nx, halfMode);
@@ -4646,7 +4647,7 @@
       updateTransformAttachment();
       els.hudText.textContent = activeTransformMode
         ? `${activeTransformMode[0].toUpperCase()}${activeTransformMode.slice(1)} gizmo active | Click ${activeTransformMode} again to turn it off`
-        : "Orbit: drag | Select: click | Transform tools: toggle Move/Rotate/Scale | Relief: volume_form_zones";
+        : "Orbit: drag | Select: click | Transform tools: toggle Move/Rotate/Scale | Relief: raised_form_zones";
     }
 
     function setDragPushMode(enabled, { silent = false } = {}) {
@@ -4660,7 +4661,7 @@
       } else {
         els.hudText.textContent = facePickMode
           ? "Triangle cursor: click a mesh triangle, double-click connected, then use Marker, Extend, Pull, Push, or Bevel Face"
-          : "Orbit: drag | Select: click | Transform tools: toggle Move/Rotate/Scale | Relief: volume_form_zones";
+          : "Orbit: drag | Select: click | Transform tools: toggle Move/Rotate/Scale | Relief: raised_form_zones";
       }
       if (!silent) log(dragPushMode ? "Drag/Push mode enabled." : "Drag/Push mode disabled.");
     }
@@ -5210,7 +5211,7 @@
       updateTransformAttachment();
       els.hudText.textContent = activeTransformMode
         ? `${activeTransformMode[0].toUpperCase()}${activeTransformMode.slice(1)} gizmo active | Click ${activeTransformMode} again to turn it off`
-        : "Orbit: drag | Select: click | Transform tools: toggle Move/Rotate/Scale | Relief: volume_form_zones";
+        : "Orbit: drag | Select: click | Transform tools: toggle Move/Rotate/Scale | Relief: raised_form_zones";
       syncInspector();
       updateState();
       if (!silent) log("Pivot edit mode off.");
@@ -6123,7 +6124,7 @@
             : els.paintTriInput.checked
               ? "Paint mode: drag to select triangles | Hold Space to orbit camera"
               : "Triangle cursor: click a mesh triangle, double-click connected, then use Marker, Extend, Pull, or Bevel Face")
-        : "Orbit: drag | Select: click | Transform: gizmo | Relief: volume_form_zones";
+        : "Orbit: drag | Select: click | Transform: gizmo | Relief: raised_form_zones";
       if (!facePickMode && !selectedFace) faceMarker.visible = false;
     }
 
