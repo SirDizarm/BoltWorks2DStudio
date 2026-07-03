@@ -1190,7 +1190,7 @@
     <section class="viewport" aria-label="3D viewport">
       <canvas id="canvas"></canvas>
       <div id="selectionBox" class="selection-box"></div>
-      <div class="hud"><span class="status-dot"></span><span id="hudText">Orbit: drag | Select: click | Transform: gizmo | Relief: smooth_form_guides</span></div>
+      <div class="hud"><span class="status-dot"></span><span id="hudText">Orbit: drag | Select: click | Transform: gizmo | Relief: volume_form_zones</span></div>
     </section>
 
     <aside class="panel right">
@@ -4139,6 +4139,76 @@
           }
         }
       }
+      const addVoxel = (x, y, z) => {
+        if (x < 0 || y < 0 || z < 0 || x >= gridX || y >= gridY || z >= gridZ) return;
+        const index = voxelIndex(x, y, z);
+        if (!occupied[index]) {
+          occupied[index] = 1;
+          voxelCount++;
+        }
+      };
+      const clearVoxel = (x, y, z) => {
+        if (x < 0 || y < 0 || z < 0 || x >= gridX || y >= gridY || z >= gridZ) return;
+        const index = voxelIndex(x, y, z);
+        if (occupied[index]) {
+          occupied[index] = 0;
+          voxelCount--;
+        }
+      };
+      const addFormEllipsoid = (cx, cy, cz, rx, ry, rz, strength = 1) => {
+        const minX = Math.max(0, Math.floor((cx - rx) * gridX));
+        const maxX = Math.min(gridX - 1, Math.ceil((cx + rx) * gridX));
+        const minY = Math.max(0, Math.floor((cy - ry) * gridY));
+        const maxY = Math.min(gridY - 1, Math.ceil((cy + ry) * gridY));
+        const minZ = Math.max(0, Math.floor((cz - rz) * gridZ));
+        const maxZ = Math.min(gridZ - 1, Math.ceil((cz + rz) * gridZ));
+        for (let y = minY; y <= maxY; y++) {
+          const ny = (y + .5) / gridY;
+          const yPart = Math.pow((ny - cy) / Math.max(.001, ry), 2);
+          for (let x = minX; x <= maxX; x++) {
+            const nx = (x + .5) / gridX;
+            const xPart = Math.pow((nx - cx) / Math.max(.001, rx), 2);
+            const run = findRun(bodyRuns[y] || [], x);
+            if (!run && Math.abs(nx - cx) > rx * .55) continue;
+            for (let z = minZ; z <= maxZ; z++) {
+              const nz = (z + .5) / gridZ;
+              const zPart = Math.pow((nz - cz) / Math.max(.001, rz), 2);
+              if (xPart + yPart + zPart <= strength) addVoxel(x, y, z);
+            }
+          }
+        }
+      };
+      const carveFormGroove = (cx, cy, cz, rx, ry, rz) => {
+        const minX = Math.max(0, Math.floor((cx - rx) * gridX));
+        const maxX = Math.min(gridX - 1, Math.ceil((cx + rx) * gridX));
+        const minY = Math.max(0, Math.floor((cy - ry) * gridY));
+        const maxY = Math.min(gridY - 1, Math.ceil((cy + ry) * gridY));
+        const minZ = Math.max(0, Math.floor((cz - rz) * gridZ));
+        const maxZ = Math.min(gridZ - 1, Math.ceil((cz + rz) * gridZ));
+        for (let y = minY; y <= maxY; y++) {
+          const ny = (y + .5) / gridY;
+          const yPart = Math.pow((ny - cy) / Math.max(.001, ry), 2);
+          for (let x = minX; x <= maxX; x++) {
+            const nx = (x + .5) / gridX;
+            const xPart = Math.pow((nx - cx) / Math.max(.001, rx), 2);
+            for (let z = minZ; z <= maxZ; z++) {
+              const nz = (z + .5) / gridZ;
+              const zPart = Math.pow((nz - cz) / Math.max(.001, rz), 2);
+              if (xPart + yPart + zPart <= 1) clearVoxel(x, y, z);
+            }
+          }
+        }
+      };
+      // Guided paired form zones. The sheet image gives the silhouette; these add the missing rounded front/back masses.
+      addFormEllipsoid(.38, .36, .18, .105, .075, .16, 1);
+      addFormEllipsoid(.62, .36, .18, .105, .075, .16, 1);
+      addFormEllipsoid(.37, .62, .82, .13, .105, .19, 1);
+      addFormEllipsoid(.63, .62, .82, .13, .105, .19, 1);
+      addFormEllipsoid(.5, .43, .36, .22, .17, .10, .72);
+      addFormEllipsoid(.5, .44, .66, .22, .17, .10, .72);
+      carveFormGroove(.5, .36, .12, .026, .078, .09);
+      carveFormGroove(.5, .63, .91, .034, .13, .105);
+
       const positions = [];
       const uvs = [];
       const point = (x, y, z) => [
@@ -4375,7 +4445,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetOvalHullDetailPolished", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: "viewSheetOvalHullDetailPolished", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
@@ -4576,7 +4646,7 @@
       updateTransformAttachment();
       els.hudText.textContent = activeTransformMode
         ? `${activeTransformMode[0].toUpperCase()}${activeTransformMode.slice(1)} gizmo active | Click ${activeTransformMode} again to turn it off`
-        : "Orbit: drag | Select: click | Transform tools: toggle Move/Rotate/Scale | Relief: smooth_form_guides";
+        : "Orbit: drag | Select: click | Transform tools: toggle Move/Rotate/Scale | Relief: volume_form_zones";
     }
 
     function setDragPushMode(enabled, { silent = false } = {}) {
@@ -4590,7 +4660,7 @@
       } else {
         els.hudText.textContent = facePickMode
           ? "Triangle cursor: click a mesh triangle, double-click connected, then use Marker, Extend, Pull, Push, or Bevel Face"
-          : "Orbit: drag | Select: click | Transform tools: toggle Move/Rotate/Scale | Relief: smooth_form_guides";
+          : "Orbit: drag | Select: click | Transform tools: toggle Move/Rotate/Scale | Relief: volume_form_zones";
       }
       if (!silent) log(dragPushMode ? "Drag/Push mode enabled." : "Drag/Push mode disabled.");
     }
@@ -5140,7 +5210,7 @@
       updateTransformAttachment();
       els.hudText.textContent = activeTransformMode
         ? `${activeTransformMode[0].toUpperCase()}${activeTransformMode.slice(1)} gizmo active | Click ${activeTransformMode} again to turn it off`
-        : "Orbit: drag | Select: click | Transform tools: toggle Move/Rotate/Scale | Relief: smooth_form_guides";
+        : "Orbit: drag | Select: click | Transform tools: toggle Move/Rotate/Scale | Relief: volume_form_zones";
       syncInspector();
       updateState();
       if (!silent) log("Pivot edit mode off.");
@@ -6053,7 +6123,7 @@
             : els.paintTriInput.checked
               ? "Paint mode: drag to select triangles | Hold Space to orbit camera"
               : "Triangle cursor: click a mesh triangle, double-click connected, then use Marker, Extend, Pull, or Bevel Face")
-        : "Orbit: drag | Select: click | Transform: gizmo | Relief: smooth_form_guides";
+        : "Orbit: drag | Select: click | Transform: gizmo | Relief: volume_form_zones";
       if (!facePickMode && !selectedFace) faceMarker.visible = false;
     }
 
