@@ -1348,7 +1348,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. BoltWorks3D build: t_pose_wide_body_v5.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. BoltWorks3D build: t_pose_round_depth_v6.
       </div>
     </footer>
   </main>
@@ -4017,8 +4017,8 @@
       const gridY = Math.max(16, Math.min(128, Math.round(rows)));
       const gridZ = Math.max(10, Math.min(44, Math.round(gridX * .55)));
       const meshH = scale;
-      const meshW = scale * .82;
-      const meshD = Math.max(back, depth, .25) * 2.4;
+      const meshW = scale * .68;
+      const meshD = Math.max(back, depth, .25) * 3.1;
       const frontMask = new Array(gridX * gridY).fill(false);
       const backMask = new Array(gridX * gridY).fill(false);
       const sideMask = new Array(gridZ * gridY).fill(false);
@@ -4154,32 +4154,32 @@
           return end > start ? makeRun(start, end, role) : null;
         };
         if (ny < .205) {
-          const headWidth = .18 + bell(ny, .11, .055) * .075;
+          const headWidth = .165 + bell(ny, .11, .055) * .065;
           return [runFromNorm(.5, headWidth, "head")].filter(Boolean);
         }
         if (ny < .285) {
           const neckToShoulder = smooth(.205, .285, ny);
-          return [runFromNorm(.5, .12 + neckToShoulder * .22, "torso")].filter(Boolean);
+          return [runFromNorm(.5, .105 + neckToShoulder * .185, "torso")].filter(Boolean);
         }
         if (ny < .64) {
-          const shoulder = bell(ny, .305, .07) * .125;
-          const chest = bell(ny, .38, .16) * .075;
-          const waistCut = bell(ny, .52, .09) * .06;
-          const hip = bell(ny, .61, .07) * .105;
-          return [runFromNorm(.5, .28 + shoulder + chest - waistCut + hip, "torso")].filter(Boolean);
+          const shoulder = bell(ny, .305, .07) * .105;
+          const chest = bell(ny, .38, .16) * .065;
+          const waistCut = bell(ny, .52, .09) * .058;
+          const hip = bell(ny, .61, .07) * .092;
+          return [runFromNorm(.5, .245 + shoulder + chest - waistCut + hip, "torso")].filter(Boolean);
         }
         if (ny < .91) {
-          const upperLeg = bell(ny, .70, .09) * .06;
-          const calf = bell(ny, .81, .07) * .04;
+          const upperLeg = bell(ny, .70, .09) * .052;
+          const calf = bell(ny, .81, .07) * .036;
           const ankleCut = bell(ny, .90, .045) * .035;
-          const legWidth = .11 + upperLeg + calf - ankleCut;
-          const legSpread = .085 + smooth(.64, .74, ny) * .06;
+          const legWidth = .095 + upperLeg + calf - ankleCut;
+          const legSpread = .078 + smooth(.64, .74, ny) * .052;
           return [
             runFromNorm(.5 - legSpread, legWidth, "leftLeg"),
             runFromNorm(.5 + legSpread, legWidth, "rightLeg")
           ].filter(Boolean);
         }
-        const footWidth = .13 + bell(ny, .935, .025) * .07;
+        const footWidth = .115 + bell(ny, .935, .025) * .06;
         return [
           runFromNorm(.42, footWidth, "leftFoot"),
           runFromNorm(.58, footWidth, "rightFoot")
@@ -4209,18 +4209,18 @@
           const xCenter = x + .5;
           const xRound = Math.abs(xCenter - run.center) / Math.max(.5, run.radius);
           if (xRound > 1.08) continue;
-          let zAllowance = Math.max(.46, Math.sqrt(Math.max(0, 1 - xRound * xRound)) * 1.12);
           const rowNy = y / Math.max(1, gridY - 1);
-          const narrowRun = run.radius < gridX * .055;
-          const armThicknessBand = rowNy > .22 && rowNy < .54;
-          const legThicknessBand = rowNy > .66 && rowNy < .93;
-          if (narrowRun && armThicknessBand) zAllowance = Math.max(zAllowance, .42);
-          if (narrowRun && legThicknessBand) zAllowance = Math.max(zAllowance, .34);
+          const depthRadiusForRun = () => {
+            if (run.role === "head") return gridZ * .13;
+            if (run.role === "leftLeg" || run.role === "rightLeg") return gridZ * (.085 + Math.exp(-Math.pow((rowNy - .75) / .14, 2)) * .04);
+            if (run.role === "leftFoot" || run.role === "rightFoot") return gridZ * .12;
+            return gridZ * (.16 + Math.exp(-Math.pow((rowNy - .48) / .18, 2)) * .07 + Math.exp(-Math.pow((rowNy - .61) / .09, 2)) * .055);
+          };
+          const zRadius = Math.max(1.6, depthRadiusForRun());
           for (let z = 0; z < gridZ; z++) {
             const zCenter = z + .5;
-            const zRound = Math.abs(zCenter - side.center) / Math.max(.5, side.radius);
-            if (!sideMask[y * gridZ + z]) continue;
-            if (zRound > zAllowance) continue;
+            const zRound = Math.abs(zCenter - gridZ * .5) / zRadius;
+            if (xRound * xRound + zRound * zRound > 1.12) continue;
             occupied[voxelIndex(x, y, z)] = 1;
             voxelCount++;
           }
@@ -4245,9 +4245,9 @@
       const addTPoseArmTubes = () => {
         const armY = gridY * .305;
         const shoulderY = gridY * .285;
-        const armRadiusY = Math.max(1.8, gridY * .026);
-        const shoulderRadiusY = Math.max(2.4, gridY * .034);
-        const armRadiusZ = Math.max(2.1, gridZ * .095);
+        const armRadiusY = Math.max(1.55, gridY * .023);
+        const shoulderRadiusY = Math.max(2.2, gridY * .031);
+        const armRadiusZ = Math.max(2.25, gridZ * .105);
         const zCenter = gridZ * .5;
         const leftMin = Math.max(1, Math.floor(gridX * .015));
         const leftMax = Math.min(gridX - 2, Math.ceil(gridX * .405));
@@ -4684,7 +4684,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetWideBodyV5", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: "viewSheetRoundDepthV6", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
