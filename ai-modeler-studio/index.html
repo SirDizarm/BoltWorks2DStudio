@@ -1333,6 +1333,13 @@
               <option value="smooth">Build from heightmap</option>
             </select>
           </label>
+          <label style="flex:1">Body preset
+            <select id="reliefBodyPresetInput">
+              <option value="auto">Auto body</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+            </select>
+          </label>
           <label class="toggle-chip" title="Use this when your object is dark on a light background"><input id="reliefDarkForegroundInput" type="checkbox" /> <span>Dark foreground</span></label>
         </div>
         <p class="api-note">Sheet mode detects the main left / middle / right silhouettes and uses them as front, side, and back measurements for one joined mesh instead of separate flat models.</p>
@@ -1354,7 +1361,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. BoltWorks3D build: t_pose_selectable_heightmap_v8.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. BoltWorks3D build: t_pose_detailed_build_v9.
       </div>
     </footer>
   </main>
@@ -1859,6 +1866,7 @@
       reliefSmoothInput: document.querySelector("#reliefSmoothInput"),
       reliefSourceModeInput: document.querySelector("#reliefSourceModeInput"),
       reliefBuildModeInput: document.querySelector("#reliefBuildModeInput"),
+      reliefBodyPresetInput: document.querySelector("#reliefBodyPresetInput"),
       reliefDarkForegroundInput: document.querySelector("#reliefDarkForegroundInput"),
       createReliefMeshBtn: document.querySelector("#createReliefMeshBtn"),
       saveFrontPngBtn: document.querySelector("#saveFrontPngBtn"),
@@ -4017,7 +4025,7 @@
       return current;
     }
 
-    function createSmoothMannequinSheetGeometry({ scale, depth, back, threshold, smoothPasses, darkForeground, imageData, viewRects }) {
+    function createSmoothMannequinSheetGeometry({ scale, depth, back, threshold, smoothPasses, darkForeground, imageData, viewRects, bodyPreset = "auto", sourceName = "" }) {
       const positions = [];
       const uvs = [];
       const meshH = scale;
@@ -4035,6 +4043,13 @@
         pushTri(a, b, c);
         pushTri(a, c, d);
       };
+      const nameHint = String(sourceName || "").toLowerCase();
+      const resolvedPreset = bodyPreset === "auto"
+        ? (/female|woman|girl|boob|breast|bust|curvy/.test(nameHint) ? "female" : (/male|man|boy|muscle|pec|bodybuilder/.test(nameHint) ? "male" : "neutral"))
+        : bodyPreset;
+      const isFemale = resolvedPreset === "female";
+      const isMale = resolvedPreset === "male";
+      let primitiveParts = 0;
       const ellipsoidPoint = (cx, cy, cz, rx, ry, rz, theta, phi) => ({
         p: p(
           cx + Math.cos(theta) * Math.sin(phi) * rx,
@@ -4044,6 +4059,7 @@
         uv: [theta / (Math.PI * 2), 1 - phi / Math.PI]
       });
       const addEllipsoid = (cx, cy, cz, rx, ry, rz, rings = 14, segments = 24) => {
+        primitiveParts++;
         for (let r = 0; r < rings; r++) {
           const phi0 = (r / rings) * Math.PI;
           const phi1 = ((r + 1) / rings) * Math.PI;
@@ -4060,6 +4076,7 @@
         }
       };
       const addCapsuleX = (cx, cy, cz, halfLength, ry, rz, rings = 18, segments = 18) => {
+        primitiveParts++;
         for (let i = 0; i < rings; i++) {
           const t0 = -1 + (i / rings) * 2;
           const t1 = -1 + ((i + 1) / rings) * 2;
@@ -4081,6 +4098,7 @@
         }
       };
       const addCapsuleY = (cx, cy, cz, halfLength, rx, rz, rings = 20, segments = 18) => {
+        primitiveParts++;
         for (let i = 0; i < rings; i++) {
           const t0 = -1 + (i / rings) * 2;
           const t1 = -1 + ((i + 1) / rings) * 2;
@@ -4102,35 +4120,83 @@
         }
       };
 
+      const chestWidth = isMale ? .68 : (isFemale ? .56 : .58);
+      const hipWidth = isFemale ? .72 : (isMale ? .55 : .62);
+      const shoulderY = 1.28;
+      const addFingerSet = side => {
+        const baseX = side * 2.1;
+        const fingerOffsets = [-.13, -.065, 0, .065, .13];
+        fingerOffsets.forEach((offset, index) => {
+          const length = index === 0 || index === 4 ? .17 : .23;
+          const spreadY = 1.14 + offset * .65;
+          const spreadZ = (index - 2) * .035;
+          addCapsuleX(baseX + side * (length * .58), spreadY, spreadZ, length, .018, .014, 6, 8);
+          addEllipsoid(baseX + side * (length * 1.18), spreadY, spreadZ, .025, .018, .014, 5, 8);
+        });
+        addCapsuleX(side * 2.06, 1.03, .07, .16, .023, .018, 6, 8);
+      };
+      const addToeSet = side => {
+        [-.055, 0, .055].forEach(offset => {
+          addEllipsoid(side * (.24 + offset), -3.05, .43, .045, .025, .055, 5, 8);
+        });
+      };
+
       addEllipsoid(0, 2.38, 0, .31, .43, .27, 16, 26);
+      addEllipsoid(-.28, 2.37, .01, .05, .13, .035, 8, 10);
+      addEllipsoid(.28, 2.37, .01, .05, .13, .035, 8, 10);
       addCapsuleY(0, 1.84, 0, .22, .16, .14, 10, 16);
-      addEllipsoid(0, 1.08, .02, .58, .82, .33, 18, 28);
+      addEllipsoid(0, 1.08, .02, chestWidth, .82, isMale ? .36 : .33, 18, 28);
       addEllipsoid(0, .18, -.02, .39, .58, .28, 14, 24);
-      addEllipsoid(0, -.68, -.03, .62, .58, .42, 16, 28);
-      addCapsuleX(-.95, 1.23, 0, .53, .135, .13, 14, 16);
-      addCapsuleX(-1.55, 1.18, 0, .55, .115, .105, 14, 16);
+      addEllipsoid(0, -.68, -.03, hipWidth, isFemale ? .62 : .56, isFemale ? .46 : .39, 16, 28);
+      addEllipsoid(-.43, shoulderY, .01, .2, .19, .18, 12, 16);
+      addEllipsoid(.43, shoulderY, .01, .2, .19, .18, 12, 16);
+      addCapsuleX(-.95, 1.23, 0, .53, isMale ? .16 : .135, isMale ? .145 : .13, 14, 16);
+      addCapsuleX(-1.55, 1.18, 0, .55, isMale ? .13 : .115, isMale ? .12 : .105, 14, 16);
       addEllipsoid(-2.08, 1.14, 0, .18, .085, .07, 10, 14);
-      addCapsuleX(.95, 1.23, 0, .53, .135, .13, 14, 16);
-      addCapsuleX(1.55, 1.18, 0, .55, .115, .105, 14, 16);
+      addFingerSet(-1);
+      addCapsuleX(.95, 1.23, 0, .53, isMale ? .16 : .135, isMale ? .145 : .13, 14, 16);
+      addCapsuleX(1.55, 1.18, 0, .55, isMale ? .13 : .115, isMale ? .12 : .105, 14, 16);
       addEllipsoid(2.08, 1.14, 0, .18, .085, .07, 10, 14);
-      addCapsuleY(-.28, -1.5, 0, .82, .17, .16, 18, 16);
-      addCapsuleY(.28, -1.5, 0, .82, .17, .16, 18, 16);
+      addFingerSet(1);
+      addCapsuleY(-.3, -1.5, 0, .82, isFemale ? .2 : .17, isFemale ? .18 : .16, 18, 16);
+      addCapsuleY(.3, -1.5, 0, .82, isFemale ? .2 : .17, isFemale ? .18 : .16, 18, 16);
       addCapsuleY(-.23, -2.42, .02, .6, .125, .12, 14, 14);
       addCapsuleY(.23, -2.42, .02, .6, .125, .12, 14, 14);
       addEllipsoid(-.24, -3.03, .18, .18, .075, .28, 8, 14);
       addEllipsoid(.24, -3.03, .18, .18, .075, .28, 8, 14);
+      addToeSet(-1);
+      addToeSet(1);
+      if (isFemale) {
+        addEllipsoid(-.23, 1.03, .28, .2, .23, .16, 12, 16);
+        addEllipsoid(.23, 1.03, .28, .2, .23, .16, 12, 16);
+        addEllipsoid(-.28, -.74, -.34, .28, .24, .2, 12, 16);
+        addEllipsoid(.28, -.74, -.34, .28, .24, .2, 12, 16);
+      } else {
+        addEllipsoid(-.25, 1.1, .25, .25, .16, .08, 10, 14);
+        addEllipsoid(.25, 1.1, .25, .25, .16, .08, 10, 14);
+        addEllipsoid(0, .52, .29, .16, .08, .04, 8, 10);
+        addEllipsoid(0, .28, .29, .14, .07, .035, 8, 10);
+      }
+      if (isMale) {
+        addEllipsoid(-.75, 1.23, .08, .18, .11, .12, 10, 14);
+        addEllipsoid(.75, 1.23, .08, .18, .11, .12, 10, 14);
+        addEllipsoid(-.3, -.98, .22, .16, .28, .09, 10, 14);
+        addEllipsoid(.3, -.98, .22, .16, .28, .09, 10, 14);
+        addEllipsoid(-.3, -2.2, -.12, .14, .25, .11, 10, 14);
+        addEllipsoid(.3, -2.2, -.12, .14, .25, .11, 10, 14);
+      }
 
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetSmoothMannequinV7", buildMode: "smooth", sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, depth, back, viewRects, primitiveParts: 17 }
+        meta: { mode: "viewSheetDetailedBuildV9", buildMode: "smooth", bodyPreset, resolvedPreset, sourceName, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, depth, back, viewRects, primitiveParts }
       };
     }
 
-    function createReliefGeometryFromViewSheet({ imageData, cols, rows, scale, depth, back, threshold, smoothPasses, darkForeground, buildMode = "heightmap" }) {
+    function createReliefGeometryFromViewSheet({ imageData, cols, rows, scale, depth, back, threshold, smoothPasses, darkForeground, buildMode = "heightmap", bodyPreset = "auto", sourceName = "" }) {
       const viewRects = detectReliefViewRects(imageData, threshold, darkForeground);
       if (buildMode === "smooth") {
-        return createSmoothMannequinSheetGeometry({ imageData, viewRects, scale, depth, back, threshold, smoothPasses, darkForeground });
+        return createSmoothMannequinSheetGeometry({ imageData, viewRects, scale, depth, back, threshold, smoothPasses, darkForeground, bodyPreset, sourceName });
       }
       const [frontRect, sideRect, backRect] = viewRects;
       const gridX = Math.max(12, Math.min(72, Math.round(cols)));
@@ -4804,7 +4870,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetHeightmapV8", buildMode: "heightmap", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: "viewSheetHeightmapV9", buildMode: "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
@@ -4824,8 +4890,9 @@
       const darkForeground = !!els.reliefDarkForegroundInput?.checked;
       const sourceMode = els.reliefSourceModeInput?.value || "single";
       const buildMode = els.reliefBuildModeInput?.value || "heightmap";
+      const bodyPreset = els.reliefBodyPresetInput?.value || "auto";
       if (sourceMode === "sheet") {
-        return createReliefGeometryFromViewSheet({ imageData, cols, rows, scale, depth, back, threshold, smoothPasses, darkForeground, buildMode });
+        return createReliefGeometryFromViewSheet({ imageData, cols, rows, scale, depth, back, threshold, smoothPasses, darkForeground, buildMode, bodyPreset, sourceName: reliefImageState.name });
       }
       const aspect = sourceW / Math.max(1, sourceH);
       const meshH = scale;
