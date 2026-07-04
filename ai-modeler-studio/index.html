@@ -1327,6 +1327,12 @@
               <option value="sheet">View sheet to one model</option>
             </select>
           </label>
+          <label style="flex:1">Build mode
+            <select id="reliefBuildModeInput">
+              <option value="heightmap">Gen from heightmap</option>
+              <option value="smooth">Build from heightmap</option>
+            </select>
+          </label>
           <label class="toggle-chip" title="Use this when your object is dark on a light background"><input id="reliefDarkForegroundInput" type="checkbox" /> <span>Dark foreground</span></label>
         </div>
         <p class="api-note">Sheet mode detects the main left / middle / right silhouettes and uses them as front, side, and back measurements for one joined mesh instead of separate flat models.</p>
@@ -1348,7 +1354,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. BoltWorks3D build: t_pose_smooth_mannequin_v7.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. BoltWorks3D build: t_pose_selectable_heightmap_v8.
       </div>
     </footer>
   </main>
@@ -1852,6 +1858,7 @@
       reliefThresholdInput: document.querySelector("#reliefThresholdInput"),
       reliefSmoothInput: document.querySelector("#reliefSmoothInput"),
       reliefSourceModeInput: document.querySelector("#reliefSourceModeInput"),
+      reliefBuildModeInput: document.querySelector("#reliefBuildModeInput"),
       reliefDarkForegroundInput: document.querySelector("#reliefDarkForegroundInput"),
       createReliefMeshBtn: document.querySelector("#createReliefMeshBtn"),
       saveFrontPngBtn: document.querySelector("#saveFrontPngBtn"),
@@ -4116,13 +4123,15 @@
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetSmoothMannequinV7", sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, depth, back, viewRects, primitiveParts: 17 }
+        meta: { mode: "viewSheetSmoothMannequinV7", buildMode: "smooth", sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, depth, back, viewRects, primitiveParts: 17 }
       };
     }
 
-    function createReliefGeometryFromViewSheet({ imageData, cols, rows, scale, depth, back, threshold, smoothPasses, darkForeground }) {
+    function createReliefGeometryFromViewSheet({ imageData, cols, rows, scale, depth, back, threshold, smoothPasses, darkForeground, buildMode = "heightmap" }) {
       const viewRects = detectReliefViewRects(imageData, threshold, darkForeground);
-      return createSmoothMannequinSheetGeometry({ imageData, viewRects, scale, depth, back, threshold, smoothPasses, darkForeground });
+      if (buildMode === "smooth") {
+        return createSmoothMannequinSheetGeometry({ imageData, viewRects, scale, depth, back, threshold, smoothPasses, darkForeground });
+      }
       const [frontRect, sideRect, backRect] = viewRects;
       const gridX = Math.max(12, Math.min(72, Math.round(cols)));
       const gridY = Math.max(16, Math.min(128, Math.round(rows)));
@@ -4795,7 +4804,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetRoundDepthV6", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: "viewSheetHeightmapV8", buildMode: "heightmap", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
@@ -4814,8 +4823,9 @@
       const smoothPasses = Math.round(reliefNumber(els.reliefSmoothInput, 2, 0, 8));
       const darkForeground = !!els.reliefDarkForegroundInput?.checked;
       const sourceMode = els.reliefSourceModeInput?.value || "single";
+      const buildMode = els.reliefBuildModeInput?.value || "heightmap";
       if (sourceMode === "sheet") {
-        return createReliefGeometryFromViewSheet({ imageData, cols, rows, scale, depth, back, threshold, smoothPasses, darkForeground });
+        return createReliefGeometryFromViewSheet({ imageData, cols, rows, scale, depth, back, threshold, smoothPasses, darkForeground, buildMode });
       }
       const aspect = sourceW / Math.max(1, sourceH);
       const meshH = scale;
