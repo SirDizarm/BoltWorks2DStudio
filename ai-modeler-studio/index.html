@@ -1348,7 +1348,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. BoltWorks3D build: t_pose_arm_split_v2.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. BoltWorks3D build: t_pose_arm_tubes_v3.
       </div>
     </footer>
   </main>
@@ -4157,10 +4157,11 @@
           const run = findRun(bodyRuns[y], x);
           if (!run) continue;
           const armRun = run.role === "leftArm" || run.role === "rightArm";
+          if (armRun) continue;
           const xCenter = x + .5;
           const xRound = Math.abs(xCenter - run.center) / Math.max(.5, run.radius);
-          if (!armRun && xRound > 1.08) continue;
-          let zAllowance = armRun ? .64 : Math.sqrt(Math.max(0, 1 - xRound * xRound)) * 1.08;
+          if (xRound > 1.08) continue;
+          let zAllowance = Math.sqrt(Math.max(0, 1 - xRound * xRound)) * 1.08;
           const rowNy = y / Math.max(1, gridY - 1);
           const narrowRun = run.radius < gridX * .055;
           const armThicknessBand = rowNy > .22 && rowNy < .54;
@@ -4169,10 +4170,8 @@
           if (narrowRun && legThicknessBand) zAllowance = Math.max(zAllowance, .34);
           for (let z = 0; z < gridZ; z++) {
             const zCenter = z + .5;
-            const zRound = armRun
-              ? Math.abs(zCenter - gridZ * .5) / Math.max(.5, gridZ * .09)
-              : Math.abs(zCenter - side.center) / Math.max(.5, side.radius);
-            if (!armRun && !sideMask[y * gridZ + z]) continue;
+            const zRound = Math.abs(zCenter - side.center) / Math.max(.5, side.radius);
+            if (!sideMask[y * gridZ + z]) continue;
             if (zRound > zAllowance) continue;
             occupied[voxelIndex(x, y, z)] = 1;
             voxelCount++;
@@ -4193,6 +4192,57 @@
         if (occupied[index]) {
           occupied[index] = 0;
           voxelCount--;
+        }
+      };
+      const addTPoseArmTubes = () => {
+        const armY = gridY * .31;
+        const shoulderY = gridY * .285;
+        const armRadiusY = Math.max(1.25, gridY * .018);
+        const shoulderRadiusY = Math.max(1.75, gridY * .024);
+        const armRadiusZ = Math.max(1.5, gridZ * .07);
+        const zCenter = gridZ * .5;
+        const leftMin = Math.max(1, Math.floor(gridX * .08));
+        const leftMax = Math.min(gridX - 2, Math.ceil(gridX * .39));
+        const rightMin = Math.max(1, Math.floor(gridX * .61));
+        const rightMax = Math.min(gridX - 2, Math.ceil(gridX * .92));
+        const addArmSide = (minX, maxX, sideSign) => {
+          for (let x = minX; x <= maxX; x++) {
+            const nx = (x + .5) / gridX;
+            const t = sideSign < 0
+              ? (nx - .08) / Math.max(.001, .39 - .08)
+              : (.92 - nx) / Math.max(.001, .92 - .61);
+            const shoulderBlend = Math.max(0, Math.min(1, t));
+            const yCenter = armY - shoulderBlend * gridY * .018;
+            const radiusY = armRadiusY + shoulderBlend * (shoulderRadiusY - armRadiusY);
+            const radiusZ = armRadiusZ * (.82 + shoulderBlend * .24);
+            const yStart = Math.max(1, Math.floor(yCenter - radiusY * 1.25));
+            const yEnd = Math.min(gridY - 2, Math.ceil(yCenter + radiusY * 1.25));
+            const zStart = Math.max(1, Math.floor(zCenter - radiusZ * 1.25));
+            const zEnd = Math.min(gridZ - 2, Math.ceil(zCenter + radiusZ * 1.25));
+            for (let y = yStart; y <= yEnd; y++) {
+              const yPart = Math.pow((y + .5 - yCenter) / Math.max(.5, radiusY), 2);
+              for (let z = zStart; z <= zEnd; z++) {
+                const zPart = Math.pow((z + .5 - zCenter) / Math.max(.5, radiusZ), 2);
+                if (yPart + zPart <= 1) addVoxel(x, y, z);
+              }
+            }
+          }
+        };
+        addArmSide(leftMin, leftMax, -1);
+        addArmSide(rightMin, rightMax, 1);
+        for (let x = Math.floor(gridX * .36); x <= Math.ceil(gridX * .64); x++) {
+          for (let y = Math.floor(shoulderY - shoulderRadiusY); y <= Math.ceil(shoulderY + shoulderRadiusY); y++) {
+            for (let z = Math.floor(zCenter - armRadiusZ); z <= Math.ceil(zCenter + armRadiusZ); z++) {
+              const nx = (x + .5) / gridX;
+              const shoulderLobe = Math.max(
+                Math.exp(-Math.pow((nx - .39) / .055, 2)),
+                Math.exp(-Math.pow((nx - .61) / .055, 2))
+              );
+              const yPart = Math.pow((y + .5 - shoulderY) / Math.max(.5, shoulderRadiusY), 2);
+              const zPart = Math.pow((z + .5 - zCenter) / Math.max(.5, armRadiusZ), 2);
+              if (shoulderLobe > .2 && yPart + zPart <= 1.15) addVoxel(x, y, z);
+            }
+          }
         }
       };
       const addFormEllipsoid = (cx, cy, cz, rx, ry, rz, strength = 1) => {
@@ -4340,7 +4390,8 @@
           for (const [x, y, z] of candidates) addVoxel(x, y, z);
         }
       };
-      fillShortInternalGaps(detailedHalfSheet ? 2 : 1);
+      addTPoseArmTubes();
+      fillShortInternalGaps(detailedHalfSheet ? 1 : 1);
       closeSkinGaps(detailedHalfSheet ? 2 : 1);
       carveArmBodySeparation();
       carveFormGroove(.5, .286, .105, .034, .052, .082);
@@ -4584,7 +4635,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetOvalHullDetailPolished", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: "viewSheetArmTubesV3", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
