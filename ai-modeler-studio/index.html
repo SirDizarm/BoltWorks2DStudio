@@ -1348,7 +1348,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. BoltWorks3D build: t_pose_round_depth_v6.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. BoltWorks3D build: t_pose_smooth_mannequin_v7.
       </div>
     </footer>
   </main>
@@ -4010,8 +4010,119 @@
       return current;
     }
 
+    function createSmoothMannequinSheetGeometry({ scale, depth, back, threshold, smoothPasses, darkForeground, imageData, viewRects }) {
+      const positions = [];
+      const uvs = [];
+      const meshH = scale;
+      const meshW = scale * .72;
+      const meshD = Math.max(back, depth, .25) * 2.35;
+      const sx = meshW / 3.8;
+      const sy = meshH / 6;
+      const sz = meshD / 1.65;
+      const p = (x, y, z) => [x * sx, y * sy, z * sz];
+      const pushTri = (a, b, c) => {
+        positions.push(...a.p, ...b.p, ...c.p);
+        uvs.push(...a.uv, ...b.uv, ...c.uv);
+      };
+      const pushQuad = (a, b, c, d) => {
+        pushTri(a, b, c);
+        pushTri(a, c, d);
+      };
+      const ellipsoidPoint = (cx, cy, cz, rx, ry, rz, theta, phi) => ({
+        p: p(
+          cx + Math.cos(theta) * Math.sin(phi) * rx,
+          cy + Math.cos(phi) * ry,
+          cz + Math.sin(theta) * Math.sin(phi) * rz
+        ),
+        uv: [theta / (Math.PI * 2), 1 - phi / Math.PI]
+      });
+      const addEllipsoid = (cx, cy, cz, rx, ry, rz, rings = 14, segments = 24) => {
+        for (let r = 0; r < rings; r++) {
+          const phi0 = (r / rings) * Math.PI;
+          const phi1 = ((r + 1) / rings) * Math.PI;
+          for (let s = 0; s < segments; s++) {
+            const theta0 = (s / segments) * Math.PI * 2;
+            const theta1 = ((s + 1) / segments) * Math.PI * 2;
+            pushQuad(
+              ellipsoidPoint(cx, cy, cz, rx, ry, rz, theta0, phi0),
+              ellipsoidPoint(cx, cy, cz, rx, ry, rz, theta1, phi0),
+              ellipsoidPoint(cx, cy, cz, rx, ry, rz, theta1, phi1),
+              ellipsoidPoint(cx, cy, cz, rx, ry, rz, theta0, phi1)
+            );
+          }
+        }
+      };
+      const addCapsuleX = (cx, cy, cz, halfLength, ry, rz, rings = 18, segments = 18) => {
+        for (let i = 0; i < rings; i++) {
+          const t0 = -1 + (i / rings) * 2;
+          const t1 = -1 + ((i + 1) / rings) * 2;
+          const capRadius = t => {
+            const a = Math.abs(t);
+            if (a <= .72) return 1;
+            const k = (1 - a) / .28;
+            return Math.max(.08, Math.sin(Math.max(0, Math.min(1, k)) * Math.PI * .5));
+          };
+          for (let s = 0; s < segments; s++) {
+            const a0 = (s / segments) * Math.PI * 2;
+            const a1 = ((s + 1) / segments) * Math.PI * 2;
+            const v = (t, a) => {
+              const r = capRadius(t);
+              return { p: p(cx + t * halfLength, cy + Math.cos(a) * ry * r, cz + Math.sin(a) * rz * r), uv: [(t + 1) * .5, a / (Math.PI * 2)] };
+            };
+            pushQuad(v(t0, a0), v(t1, a0), v(t1, a1), v(t0, a1));
+          }
+        }
+      };
+      const addCapsuleY = (cx, cy, cz, halfLength, rx, rz, rings = 20, segments = 18) => {
+        for (let i = 0; i < rings; i++) {
+          const t0 = -1 + (i / rings) * 2;
+          const t1 = -1 + ((i + 1) / rings) * 2;
+          const capRadius = t => {
+            const a = Math.abs(t);
+            if (a <= .72) return 1;
+            const k = (1 - a) / .28;
+            return Math.max(.08, Math.sin(Math.max(0, Math.min(1, k)) * Math.PI * .5));
+          };
+          for (let s = 0; s < segments; s++) {
+            const a0 = (s / segments) * Math.PI * 2;
+            const a1 = ((s + 1) / segments) * Math.PI * 2;
+            const v = (t, a) => {
+              const r = capRadius(t);
+              return { p: p(cx + Math.cos(a) * rx * r, cy + t * halfLength, cz + Math.sin(a) * rz * r), uv: [a / (Math.PI * 2), (t + 1) * .5] };
+            };
+            pushQuad(v(t0, a0), v(t1, a0), v(t1, a1), v(t0, a1));
+          }
+        }
+      };
+
+      addEllipsoid(0, 2.38, 0, .31, .43, .27, 16, 26);
+      addCapsuleY(0, 1.84, 0, .22, .16, .14, 10, 16);
+      addEllipsoid(0, 1.08, .02, .58, .82, .33, 18, 28);
+      addEllipsoid(0, .18, -.02, .39, .58, .28, 14, 24);
+      addEllipsoid(0, -.68, -.03, .62, .58, .42, 16, 28);
+      addCapsuleX(-.95, 1.23, 0, .53, .135, .13, 14, 16);
+      addCapsuleX(-1.55, 1.18, 0, .55, .115, .105, 14, 16);
+      addEllipsoid(-2.08, 1.14, 0, .18, .085, .07, 10, 14);
+      addCapsuleX(.95, 1.23, 0, .53, .135, .13, 14, 16);
+      addCapsuleX(1.55, 1.18, 0, .55, .115, .105, 14, 16);
+      addEllipsoid(2.08, 1.14, 0, .18, .085, .07, 10, 14);
+      addCapsuleY(-.28, -1.5, 0, .82, .17, .16, 18, 16);
+      addCapsuleY(.28, -1.5, 0, .82, .17, .16, 18, 16);
+      addCapsuleY(-.23, -2.42, .02, .6, .125, .12, 14, 14);
+      addCapsuleY(.23, -2.42, .02, .6, .125, .12, 14, 14);
+      addEllipsoid(-.24, -3.03, .18, .18, .075, .28, 8, 14);
+      addEllipsoid(.24, -3.03, .18, .18, .075, .28, 8, 14);
+
+      return {
+        positions,
+        uvs,
+        meta: { mode: "viewSheetSmoothMannequinV7", sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, depth, back, viewRects, primitiveParts: 17 }
+      };
+    }
+
     function createReliefGeometryFromViewSheet({ imageData, cols, rows, scale, depth, back, threshold, smoothPasses, darkForeground }) {
       const viewRects = detectReliefViewRects(imageData, threshold, darkForeground);
+      return createSmoothMannequinSheetGeometry({ imageData, viewRects, scale, depth, back, threshold, smoothPasses, darkForeground });
       const [frontRect, sideRect, backRect] = viewRects;
       const gridX = Math.max(12, Math.min(72, Math.round(cols)));
       const gridY = Math.max(16, Math.min(128, Math.round(rows)));
