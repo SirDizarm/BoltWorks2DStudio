@@ -1190,7 +1190,7 @@
     <section class="viewport" aria-label="3D viewport">
       <canvas id="canvas"></canvas>
       <div id="selectionBox" class="selection-box"></div>
-      <div class="hud"><span class="status-dot"></span><span id="hudText">Orbit: drag | Select: click | Transform: gizmo | Relief: no_front_back_bleed</span></div>
+      <div class="hud"><span class="status-dot"></span><span id="hudText">Orbit: drag | Select: click | Transform: gizmo</span></div>
     </section>
 
     <aside class="panel right">
@@ -1348,7 +1348,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. BoltWorks3D build: t_pose_arm_split_v2.
       </div>
     </footer>
   </main>
@@ -4099,13 +4099,44 @@
           const active = x < width && mask[y * width + x];
           if (active && start < 0) start = x;
           if ((!active || x === width) && start >= 0) {
-            runs.push({ start, end: x - 1, center: (start + x) * .5, radius: Math.max(.5, (x - start) * .5) });
+            runs.push({ start, end: x - 1, center: (start + x) * .5, radius: Math.max(.5, (x - start) * .5), role: "body" });
             start = -1;
           }
         }
         return runs;
       };
       const findRun = (runs, x) => runs.find(run => x >= run.start && x <= run.end) || null;
+      const makeRun = (start, end, role = "body") => ({
+        start,
+        end,
+        center: (start + end + 1) * .5,
+        radius: Math.max(.5, (end - start + 1) * .5),
+        role
+      });
+      const splitTPoseArmRuns = (runs, y) => {
+        const ny = y / Math.max(1, gridY - 1);
+        if (ny < .285 || ny > .615) return runs;
+        const split = [];
+        const leftGap = Math.round(gridX * (ny < .34 ? .288 : .322));
+        const rightGap = Math.round(gridX * (ny < .34 ? .712 : .678));
+        const centerMin = Math.round(gridX * .38);
+        const centerMax = Math.round(gridX * .62);
+        for (const run of runs) {
+          const width = run.end - run.start + 1;
+          if (width < gridX * .42 || run.start > centerMin || run.end < centerMax) {
+            split.push(run);
+            continue;
+          }
+          const leftEnd = Math.min(run.end, leftGap - 1);
+          const bodyStart = Math.max(run.start, leftGap + 1);
+          const bodyEnd = Math.min(run.end, rightGap - 1);
+          const rightStart = Math.max(run.start, rightGap + 1);
+          if (leftEnd - run.start >= 2) split.push(makeRun(run.start, leftEnd, "leftArm"));
+          if (bodyEnd - bodyStart >= 2) split.push(makeRun(bodyStart, bodyEnd, "body"));
+          if (run.end - rightStart >= 2) split.push(makeRun(rightStart, run.end, "rightArm"));
+        }
+        return split.length ? split : runs;
+      };
       const sideProfiles = [];
       const bodyRuns = [];
       for (let y = 0; y < gridY; y++) {
@@ -4113,7 +4144,7 @@
         for (let x = 0; x < gridX; x++) unionRow[x] = frontMask[y * gridX + x] || backMask[y * gridX + x];
         const unionMask = new Array(gridX).fill(false);
         for (let x = 0; x < gridX; x++) unionMask[x] = unionRow[x];
-        bodyRuns[y] = rowRuns(unionMask, gridX, 0);
+        bodyRuns[y] = splitTPoseArmRuns(rowRuns(unionMask, gridX, 0), y);
         const sideRuns = rowRuns(sideMask, gridZ, y);
         const largestSide = sideRuns.sort((a, b) => (b.end - b.start) - (a.end - a.start))[0] || null;
         sideProfiles[y] = largestSide;
@@ -4125,14 +4156,23 @@
         for (let x = 0; x < gridX; x++) {
           const run = findRun(bodyRuns[y], x);
           if (!run) continue;
+          const armRun = run.role === "leftArm" || run.role === "rightArm";
           const xCenter = x + .5;
           const xRound = Math.abs(xCenter - run.center) / Math.max(.5, run.radius);
-          if (xRound > 1.08) continue;
-          const zAllowance = Math.sqrt(Math.max(0, 1 - xRound * xRound)) * 1.08;
+          if (!armRun && xRound > 1.08) continue;
+          let zAllowance = armRun ? .64 : Math.sqrt(Math.max(0, 1 - xRound * xRound)) * 1.08;
+          const rowNy = y / Math.max(1, gridY - 1);
+          const narrowRun = run.radius < gridX * .055;
+          const armThicknessBand = rowNy > .22 && rowNy < .54;
+          const legThicknessBand = rowNy > .66 && rowNy < .93;
+          if (narrowRun && armThicknessBand) zAllowance = Math.max(zAllowance, .42);
+          if (narrowRun && legThicknessBand) zAllowance = Math.max(zAllowance, .34);
           for (let z = 0; z < gridZ; z++) {
-            if (!sideMask[y * gridZ + z]) continue;
             const zCenter = z + .5;
-            const zRound = Math.abs(zCenter - side.center) / Math.max(.5, side.radius);
+            const zRound = armRun
+              ? Math.abs(zCenter - gridZ * .5) / Math.max(.5, gridZ * .09)
+              : Math.abs(zCenter - side.center) / Math.max(.5, side.radius);
+            if (!armRun && !sideMask[y * gridZ + z]) continue;
             if (zRound > zAllowance) continue;
             occupied[voxelIndex(x, y, z)] = 1;
             voxelCount++;
@@ -4202,15 +4242,81 @@
       // Detailed half-sheet form zones. Let the side silhouette drive most of the body depth,
       // then add compact paired volumes only where a flat silhouette cannot express rounded form.
       const detailedHalfSheet = frontHalfMode !== "full" || backHalfMode !== "full";
-      const pairedGuideScale = detailedHalfSheet ? .74 : 1;
-      const slabGuideScale = detailedHalfSheet ? .08 : .32;
+      const pairedGuideScale = detailedHalfSheet ? .46 : 1;
+      const slabGuideScale = detailedHalfSheet ? .025 : .32;
       // Keep front chest helpers as compact forward volumes. Do not add paired rear hip
       // ellipsoids as solid voxels: those blobs change the front silhouette too. The
       // backside is now shaped by side/back depth displacement instead.
-      addFormEllipsoid(.38, .305, .155, .068, .044, .096, pairedGuideScale);
-      addFormEllipsoid(.62, .305, .155, .068, .044, .096, pairedGuideScale);
-      addFormEllipsoid(.5, .382, .35, .122, .052, .034, slabGuideScale);
-      addFormEllipsoid(.5, .405, .66, .122, .052, .034, slabGuideScale);
+      addFormEllipsoid(.39, .286, .155, .052, .027, .074, pairedGuideScale);
+      addFormEllipsoid(.61, .286, .155, .052, .027, .074, pairedGuideScale);
+      addFormEllipsoid(.5, .372, .35, .09, .032, .022, slabGuideScale);
+      addFormEllipsoid(.5, .395, .66, .09, .032, .022, slabGuideScale);
+
+      // Compact side fill: connect short internal gaps across depth/width so thin limbs
+      // and torso slices become solid instead of see-through, without growing the outer silhouette.
+      // Arm separation: after the compact fill closes the skin, cut a slim air gap
+      // between the hanging arms and torso so the arms read as their own parts. The
+      // upper shoulder area is preserved so arms stay attached where they should.
+      const carveArmBodySeparation = () => {
+        const softBell = (v, center, radius) => { const d = (v - center) / Math.max(radius, .0001); return Math.max(0, 1 - d * d); };
+        const yMin = Math.max(1, Math.floor(gridY * .292));
+        const yMax = Math.min(gridY - 2, Math.ceil(gridY * .615));
+        const gapCenters = [.318, .682];
+        const gapHalfWidth = detailedHalfSheet ? .017 : .022;
+        for (let y = yMin; y <= yMax; y++) {
+          const ny = (y + .5) / gridY;
+          const upperArmBand = softBell(ny, .345, .074);
+          const forearmBand = softBell(ny, .465, .108);
+          const handBand = softBell(ny, .575, .055) * .72;
+          const preserveShoulder = softBell(ny, .265, .04) * .92;
+          const cutBand = Math.max(upperArmBand, forearmBand, handBand) * (1 - preserveShoulder);
+          if (cutBand < .12) continue;
+          for (const cx of gapCenters) {
+            const minX = Math.max(1, Math.floor((cx - gapHalfWidth * 1.7) * gridX));
+            const maxX = Math.min(gridX - 2, Math.ceil((cx + gapHalfWidth * 1.7) * gridX));
+            for (let x = minX; x <= maxX; x++) {
+              const nx = (x + .5) / gridX;
+              const xCut = softBell(nx, cx, gapHalfWidth);
+              if (xCut * cutBand < .18) continue;
+              for (let z = 1; z < gridZ - 1; z++) {
+                const nz = (z + .5) / gridZ;
+                const centerDepth = softBell(nz, .5, .36);
+                const sideDepth = Math.max(softBell(nz, .24, .23), softBell(nz, .76, .23)) * .34;
+                const depthCut = .5 + centerDepth * .42 + sideDepth;
+                if (xCut * cutBand * depthCut > .235) clearVoxel(x, y, z);
+              }
+            }
+          }
+        }
+      };
+      const fillShortInternalGaps = passes => {
+        const isFilled = (x, y, z) => x >= 0 && y >= 0 && z >= 0 && x < gridX && y < gridY && z < gridZ && occupied[voxelIndex(x, y, z)];
+        const fillList = [];
+        for (let pass = 0; pass < passes; pass++) {
+          fillList.length = 0;
+          for (let y = 1; y < gridY - 1; y++) {
+            for (let x = 1; x < gridX - 1; x++) {
+              let last = -1;
+              for (let z = 0; z < gridZ; z++) {
+                if (!isFilled(x, y, z)) continue;
+                if (last >= 0 && z - last <= 4) for (let zz = last + 1; zz < z; zz++) fillList.push([x, y, zz]);
+                last = z;
+              }
+            }
+          }
+          for (let y = 1; y < gridY - 1; y++) {
+            for (let z = 1; z < gridZ - 1; z++) {
+              let last = -1;
+              for (let x = 0; x < gridX; x++) {
+                if (!isFilled(x, y, z)) continue;
+                if (last >= 0 && x - last <= 3) for (let xx = last + 1; xx < x; xx++) fillList.push([xx, y, z]);
+                last = x;
+              }
+            }
+          }
+          for (const [x, y, z] of fillList) addVoxel(x, y, z);
+        }
+      };
 
       // Skin close pass: the thresholded image can leave tiny one-cell gaps between slice rows.
       // Fill only pinholes supported from opposite sides, so the mannequin becomes continuous without inflating the silhouette.
@@ -4234,8 +4340,10 @@
           for (const [x, y, z] of candidates) addVoxel(x, y, z);
         }
       };
+      fillShortInternalGaps(detailedHalfSheet ? 2 : 1);
       closeSkinGaps(detailedHalfSheet ? 2 : 1);
-      carveFormGroove(.5, .305, .105, .03, .064, .096);
+      carveArmBodySeparation();
+      carveFormGroove(.5, .286, .105, .034, .052, .082);
       carveFormGroove(.5, .54, .93, .04, .108, .124);
 
       const positions = [];
@@ -4254,9 +4362,9 @@
         pushTri(a, c, d);
       };
       const detailStrength = Math.min(.035, Math.max(.01, depth * .018));
-      const formStrength = Math.min(.18, Math.max(.055, depth * .135));
+      const formStrength = Math.min(.155, Math.max(.05, depth * .118));
       const detailContrastStrength = 0;
-      const centerGrooveStrength = formStrength * .7;
+      const centerGrooveStrength = formStrength * .92;
       const halfDepthStrength = formStrength * .18;
       const clampDetail = amount => Math.max(-formStrength * .72, Math.min(formStrength * 1.05, amount));
       const bell = (value, center, width) => Math.exp(-Math.pow((value - center) / Math.max(.001, width), 2));
@@ -4294,18 +4402,20 @@
         const ny = y / Math.max(1, gridY);
         const centerLine = bell(nx, .5, view === "back" ? .045 : .055);
         const torsoBand = bell(ny, .43, .20);
-        const chestBand = bell(ny, .315, .062);
-        const hipBand = bell(ny, .555, .105);
+        const chestBand = bell(ny, .286, .04);
+        const hipBand = bell(ny, .545, .068);
         const upperLegBand = bell(ny, .72, .10);
         const shoulderBand = bell(ny, .27, .08);
-        const backBand = view === "back" ? Math.max(torsoBand * .55, hipBand * 1.35, upperLegBand * .55) : Math.max(torsoBand * .42, hipBand * .58);
-        const leftFormLobe = bell(nx, .37, .105);
-        const rightFormLobe = bell(nx, .63, .105);
+        const backBand = view === "back" ? Math.max(torsoBand * .55, hipBand * 1.05, upperLegBand * .5) : Math.max(torsoBand * .42, hipBand * .38);
+        const leftFormLobe = bell(nx, .38, .07);
+        const rightFormLobe = bell(nx, .62, .07);
         const pairedLobes = Math.max(leftFormLobe, rightFormLobe);
-        const frontChestVolume = view === "front" ? pairedLobes * chestBand * formStrength * .48 : 0;
+        const underChestSuppress = 1 - bell(ny, .345, .045) * .94;
+        const frontChestVolume = view === "front" ? pairedLobes * chestBand * underChestSuppress * formStrength * .27 : 0;
         const frontRibVolume = view === "front" ? bell(nx, .5, .20) * torsoBand * formStrength * .022 : 0;
         const backShoulderVolume = view === "back" ? bell(nx, .5, .30) * shoulderBand * formStrength * .09 : 0;
-        const backHipVolume = view === "back" ? pairedLobes * hipBand * formStrength * .68 : 0;
+        const lowerHipSuppress = 1 - bell(ny, .62, .07) * .9;
+        const backHipVolume = view === "back" ? pairedLobes * hipBand * lowerHipSuppress * formStrength * .28 : 0;
         const centerGroove = view === "front" || view === "back" ? -centerLine * backBand * centerGrooveStrength : 0;
         const halfMode = view === "front" ? frontHalfMode : view === "back" ? backHalfMode : "full";
         const halfT = halfMode === "full" ? 1 : halfViewNx(nx, halfMode);
@@ -4675,7 +4785,7 @@
       updateTransformAttachment();
       els.hudText.textContent = activeTransformMode
         ? `${activeTransformMode[0].toUpperCase()}${activeTransformMode.slice(1)} gizmo active | Click ${activeTransformMode} again to turn it off`
-        : "Orbit: drag | Select: click | Transform tools: toggle Move/Rotate/Scale | Relief: no_front_back_bleed";
+        : "Orbit: drag | Select: click | Transform tools: toggle Move/Rotate/Scale";
     }
 
     function setDragPushMode(enabled, { silent = false } = {}) {
@@ -4689,7 +4799,7 @@
       } else {
         els.hudText.textContent = facePickMode
           ? "Triangle cursor: click a mesh triangle, double-click connected, then use Marker, Extend, Pull, Push, or Bevel Face"
-          : "Orbit: drag | Select: click | Transform tools: toggle Move/Rotate/Scale | Relief: no_front_back_bleed";
+          : "Orbit: drag | Select: click | Transform tools: toggle Move/Rotate/Scale";
       }
       if (!silent) log(dragPushMode ? "Drag/Push mode enabled." : "Drag/Push mode disabled.");
     }
@@ -5239,7 +5349,7 @@
       updateTransformAttachment();
       els.hudText.textContent = activeTransformMode
         ? `${activeTransformMode[0].toUpperCase()}${activeTransformMode.slice(1)} gizmo active | Click ${activeTransformMode} again to turn it off`
-        : "Orbit: drag | Select: click | Transform tools: toggle Move/Rotate/Scale | Relief: no_front_back_bleed";
+        : "Orbit: drag | Select: click | Transform tools: toggle Move/Rotate/Scale";
       syncInspector();
       updateState();
       if (!silent) log("Pivot edit mode off.");
@@ -6152,7 +6262,7 @@
             : els.paintTriInput.checked
               ? "Paint mode: drag to select triangles | Hold Space to orbit camera"
               : "Triangle cursor: click a mesh triangle, double-click connected, then use Marker, Extend, Pull, or Bevel Face")
-        : "Orbit: drag | Select: click | Transform: gizmo | Relief: no_front_back_bleed";
+        : "Orbit: drag | Select: click | Transform: gizmo";
       if (!facePickMode && !selectedFace) faceMarker.visible = false;
     }
 
@@ -13810,3 +13920,4 @@ end
   </script>
 </body>
 </html>
+
