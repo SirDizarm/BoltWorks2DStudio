@@ -1348,7 +1348,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. BoltWorks3D build: t_pose_center_body_v4.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. BoltWorks3D build: t_pose_wide_body_v5.
       </div>
     </footer>
   </main>
@@ -4017,7 +4017,7 @@
       const gridY = Math.max(16, Math.min(128, Math.round(rows)));
       const gridZ = Math.max(10, Math.min(44, Math.round(gridX * .55)));
       const meshH = scale;
-      const meshW = scale * .52;
+      const meshW = scale * .82;
       const meshD = Math.max(back, depth, .25) * 2.4;
       const frontMask = new Array(gridX * gridY).fill(false);
       const backMask = new Array(gridX * gridY).fill(false);
@@ -4154,32 +4154,32 @@
           return end > start ? makeRun(start, end, role) : null;
         };
         if (ny < .205) {
-          const headWidth = .13 + bell(ny, .11, .055) * .055;
+          const headWidth = .18 + bell(ny, .11, .055) * .075;
           return [runFromNorm(.5, headWidth, "head")].filter(Boolean);
         }
         if (ny < .285) {
           const neckToShoulder = smooth(.205, .285, ny);
-          return [runFromNorm(.5, .085 + neckToShoulder * .15, "torso")].filter(Boolean);
+          return [runFromNorm(.5, .12 + neckToShoulder * .22, "torso")].filter(Boolean);
         }
         if (ny < .64) {
-          const shoulder = bell(ny, .305, .07) * .075;
-          const chest = bell(ny, .38, .16) * .045;
-          const waistCut = bell(ny, .52, .09) * .055;
-          const hip = bell(ny, .61, .07) * .065;
-          return [runFromNorm(.5, .19 + shoulder + chest - waistCut + hip, "torso")].filter(Boolean);
+          const shoulder = bell(ny, .305, .07) * .125;
+          const chest = bell(ny, .38, .16) * .075;
+          const waistCut = bell(ny, .52, .09) * .06;
+          const hip = bell(ny, .61, .07) * .105;
+          return [runFromNorm(.5, .28 + shoulder + chest - waistCut + hip, "torso")].filter(Boolean);
         }
         if (ny < .91) {
-          const upperLeg = bell(ny, .70, .09) * .035;
-          const calf = bell(ny, .81, .07) * .028;
-          const ankleCut = bell(ny, .90, .045) * .032;
-          const legWidth = .075 + upperLeg + calf - ankleCut;
-          const legSpread = .06 + smooth(.64, .74, ny) * .045;
+          const upperLeg = bell(ny, .70, .09) * .06;
+          const calf = bell(ny, .81, .07) * .04;
+          const ankleCut = bell(ny, .90, .045) * .035;
+          const legWidth = .11 + upperLeg + calf - ankleCut;
+          const legSpread = .085 + smooth(.64, .74, ny) * .06;
           return [
             runFromNorm(.5 - legSpread, legWidth, "leftLeg"),
             runFromNorm(.5 + legSpread, legWidth, "rightLeg")
           ].filter(Boolean);
         }
-        const footWidth = .09 + bell(ny, .935, .025) * .045;
+        const footWidth = .13 + bell(ny, .935, .025) * .07;
         return [
           runFromNorm(.42, footWidth, "leftFoot"),
           runFromNorm(.58, footWidth, "rightFoot")
@@ -4209,7 +4209,7 @@
           const xCenter = x + .5;
           const xRound = Math.abs(xCenter - run.center) / Math.max(.5, run.radius);
           if (xRound > 1.08) continue;
-          let zAllowance = Math.sqrt(Math.max(0, 1 - xRound * xRound)) * 1.08;
+          let zAllowance = Math.max(.46, Math.sqrt(Math.max(0, 1 - xRound * xRound)) * 1.12);
           const rowNy = y / Math.max(1, gridY - 1);
           const narrowRun = run.radius < gridX * .055;
           const armThicknessBand = rowNy > .22 && rowNy < .54;
@@ -4243,22 +4243,22 @@
         }
       };
       const addTPoseArmTubes = () => {
-        const armY = gridY * .31;
+        const armY = gridY * .305;
         const shoulderY = gridY * .285;
-        const armRadiusY = Math.max(1.25, gridY * .018);
-        const shoulderRadiusY = Math.max(1.75, gridY * .024);
-        const armRadiusZ = Math.max(1.5, gridZ * .07);
+        const armRadiusY = Math.max(1.8, gridY * .026);
+        const shoulderRadiusY = Math.max(2.4, gridY * .034);
+        const armRadiusZ = Math.max(2.1, gridZ * .095);
         const zCenter = gridZ * .5;
-        const leftMin = Math.max(1, Math.floor(gridX * .08));
-        const leftMax = Math.min(gridX - 2, Math.ceil(gridX * .39));
-        const rightMin = Math.max(1, Math.floor(gridX * .61));
-        const rightMax = Math.min(gridX - 2, Math.ceil(gridX * .92));
+        const leftMin = Math.max(1, Math.floor(gridX * .015));
+        const leftMax = Math.min(gridX - 2, Math.ceil(gridX * .405));
+        const rightMin = Math.max(1, Math.floor(gridX * .595));
+        const rightMax = Math.min(gridX - 2, Math.ceil(gridX * .985));
         const addArmSide = (minX, maxX, sideSign) => {
           for (let x = minX; x <= maxX; x++) {
             const nx = (x + .5) / gridX;
             const t = sideSign < 0
-              ? (nx - .08) / Math.max(.001, .39 - .08)
-              : (.92 - nx) / Math.max(.001, .92 - .61);
+              ? (nx - .015) / Math.max(.001, .405 - .015)
+              : (.985 - nx) / Math.max(.001, .985 - .595);
             const shoulderBlend = Math.max(0, Math.min(1, t));
             const yCenter = armY - shoulderBlend * gridY * .018;
             const radiusY = armRadiusY + shoulderBlend * (shoulderRadiusY - armRadiusY);
@@ -4283,8 +4283,8 @@
             for (let z = Math.floor(zCenter - armRadiusZ); z <= Math.ceil(zCenter + armRadiusZ); z++) {
               const nx = (x + .5) / gridX;
               const shoulderLobe = Math.max(
-                Math.exp(-Math.pow((nx - .39) / .055, 2)),
-                Math.exp(-Math.pow((nx - .61) / .055, 2))
+                Math.exp(-Math.pow((nx - .405) / .075, 2)),
+                Math.exp(-Math.pow((nx - .595) / .075, 2))
               );
               const yPart = Math.pow((y + .5 - shoulderY) / Math.max(.5, shoulderRadiusY), 2);
               const zPart = Math.pow((z + .5 - zCenter) / Math.max(.5, armRadiusZ), 2);
@@ -4441,7 +4441,8 @@
       addTPoseArmTubes();
       fillShortInternalGaps(detailedHalfSheet ? 1 : 1);
       closeSkinGaps(detailedHalfSheet ? 2 : 1);
-      carveArmBodySeparation();
+      // The centered body rig already separates arms from torso; the old split-mask
+      // gutter carve removes too much volume from the new centered silhouette.
       carveFormGroove(.5, .286, .105, .034, .052, .082);
       carveFormGroove(.5, .54, .93, .04, .108, .124);
 
@@ -4683,7 +4684,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetCenteredBodyV4", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: "viewSheetWideBodyV5", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
