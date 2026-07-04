@@ -1348,7 +1348,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. BoltWorks3D build: t_pose_arm_tubes_v3.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. BoltWorks3D build: t_pose_center_body_v4.
       </div>
     </footer>
   </main>
@@ -4137,6 +4137,54 @@
         }
         return split.length ? split : runs;
       };
+      const centeredMannequinBodyRuns = y => {
+        const ny = y / Math.max(1, gridY - 1);
+        const sideRuns = rowRuns(sideMask, gridZ, y);
+        if (!sideRuns.length) return [];
+        const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+        const smooth = (edge0, edge1, value) => {
+          const t = clamp((value - edge0) / Math.max(.0001, edge1 - edge0), 0, 1);
+          return t * t * (3 - 2 * t);
+        };
+        const bell = (value, center, width) => Math.exp(-Math.pow((value - center) / Math.max(.001, width), 2));
+        const runFromNorm = (center, width, role = "body") => {
+          const half = Math.max(.012, width * .5);
+          const start = clamp(Math.round((center - half) * gridX), 1, gridX - 2);
+          const end = clamp(Math.round((center + half) * gridX), 1, gridX - 2);
+          return end > start ? makeRun(start, end, role) : null;
+        };
+        if (ny < .205) {
+          const headWidth = .13 + bell(ny, .11, .055) * .055;
+          return [runFromNorm(.5, headWidth, "head")].filter(Boolean);
+        }
+        if (ny < .285) {
+          const neckToShoulder = smooth(.205, .285, ny);
+          return [runFromNorm(.5, .085 + neckToShoulder * .15, "torso")].filter(Boolean);
+        }
+        if (ny < .64) {
+          const shoulder = bell(ny, .305, .07) * .075;
+          const chest = bell(ny, .38, .16) * .045;
+          const waistCut = bell(ny, .52, .09) * .055;
+          const hip = bell(ny, .61, .07) * .065;
+          return [runFromNorm(.5, .19 + shoulder + chest - waistCut + hip, "torso")].filter(Boolean);
+        }
+        if (ny < .91) {
+          const upperLeg = bell(ny, .70, .09) * .035;
+          const calf = bell(ny, .81, .07) * .028;
+          const ankleCut = bell(ny, .90, .045) * .032;
+          const legWidth = .075 + upperLeg + calf - ankleCut;
+          const legSpread = .06 + smooth(.64, .74, ny) * .045;
+          return [
+            runFromNorm(.5 - legSpread, legWidth, "leftLeg"),
+            runFromNorm(.5 + legSpread, legWidth, "rightLeg")
+          ].filter(Boolean);
+        }
+        const footWidth = .09 + bell(ny, .935, .025) * .045;
+        return [
+          runFromNorm(.42, footWidth, "leftFoot"),
+          runFromNorm(.58, footWidth, "rightFoot")
+        ].filter(Boolean);
+      };
       const sideProfiles = [];
       const bodyRuns = [];
       for (let y = 0; y < gridY; y++) {
@@ -4144,7 +4192,7 @@
         for (let x = 0; x < gridX; x++) unionRow[x] = frontMask[y * gridX + x] || backMask[y * gridX + x];
         const unionMask = new Array(gridX).fill(false);
         for (let x = 0; x < gridX; x++) unionMask[x] = unionRow[x];
-        bodyRuns[y] = splitTPoseArmRuns(rowRuns(unionMask, gridX, 0), y);
+        bodyRuns[y] = centeredMannequinBodyRuns(y);
         const sideRuns = rowRuns(sideMask, gridZ, y);
         const largestSide = sideRuns.sort((a, b) => (b.end - b.start) - (a.end - a.start))[0] || null;
         sideProfiles[y] = largestSide;
@@ -4635,7 +4683,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetArmTubesV3", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: "viewSheetCenteredBodyV4", cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
