@@ -1361,7 +1361,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: closed half-sheet skin with calmer body carving. Version: gen_heightmap_closed_skin_v17. BoltWorks3D build: t_pose_gen_closed_skin_v17.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: wider T-pose arms with closer legs. Version: gen_heightmap_arm_span_leg_fix_v18. BoltWorks3D build: t_pose_gen_arm_span_leg_fix_v18.
       </div>
     </footer>
   </main>
@@ -4203,7 +4203,7 @@
       const gridY = Math.max(16, Math.min(128, Math.round(rows)));
       const gridZ = Math.max(10, Math.min(44, Math.round(gridX * .55)));
       const meshH = scale;
-      const meshW = scale * .52;
+      const meshW = scale * .82;
       const meshD = Math.max(back, depth, .25) * 2.15;
       const frontMask = new Array(gridX * gridY).fill(false);
       const backMask = new Array(gridX * gridY).fill(false);
@@ -4403,7 +4403,7 @@
           const calf = bell(ny, .82, .075) * .06;
           const ankleCut = bell(ny, .925, .045) * .05;
           const legWidth = .112 + thigh + calf - kneeCut - ankleCut;
-          const legSpread = .082 + smooth(.535, .67, ny) * .1;
+          const legSpread = .045 + smooth(.535, .67, ny) * .04;
           return [
             runFromNorm(.5 - legSpread, legWidth, "leftLeg"),
             runFromNorm(.5 + legSpread, legWidth, "rightLeg")
@@ -4411,8 +4411,8 @@
         }
         const footWidth = .12 + bell(ny, .965, .023) * .085;
         return [
-          runFromNorm(.42, footWidth, "leftFoot"),
-          runFromNorm(.58, footWidth, "rightFoot")
+          runFromNorm(.465, footWidth, "leftFoot"),
+          runFromNorm(.535, footWidth, "rightFoot")
         ].filter(Boolean);
       };
       const centeredMannequinBodyRuns = y => {
@@ -4451,7 +4451,7 @@
           const calf = bell(ny, .81, .07) * .036;
           const ankleCut = bell(ny, .90, .045) * .035;
           const legWidth = .095 + upperLeg + calf - ankleCut;
-          const legSpread = .078 + smooth(.64, .74, ny) * .052;
+          const legSpread = .048 + smooth(.64, .74, ny) * .032;
           return [
             runFromNorm(.5 - legSpread, legWidth, "leftLeg"),
             runFromNorm(.5 + legSpread, legWidth, "rightLeg")
@@ -4459,8 +4459,8 @@
         }
         const footWidth = .115 + bell(ny, .935, .025) * .06;
         return [
-          runFromNorm(.42, footWidth, "leftFoot"),
-          runFromNorm(.58, footWidth, "rightFoot")
+          runFromNorm(.465, footWidth, "leftFoot"),
+          runFromNorm(.535, footWidth, "rightFoot")
         ].filter(Boolean);
       };
       const sideProfiles = [];
@@ -4985,7 +4985,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetHeightmapClosedSkinV17", buildMode: "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: true, wideBodyScaffold: true, preservedArmSpanGuides: true, filledScaffoldFaces: true, strongerArmGuides: true, closedInternalSkin: true, calmerScaffoldCarving: true, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: "viewSheetHeightmapArmSpanLegFixV18", buildMode: "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: true, wideBodyScaffold: true, preservedArmSpanGuides: true, filledScaffoldFaces: true, strongerArmGuides: true, closedInternalSkin: true, calmerScaffoldCarving: true, widerArmSpan: true, closerLegStance: true, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
