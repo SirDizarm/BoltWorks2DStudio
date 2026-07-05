@@ -1362,7 +1362,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: source-like sheet mesh with attached surface anatomy and leg split. Version: source_like_surface_anatomy_mesh_v28. BoltWorks3D build: t_pose_source_like_surface_anatomy_mesh_v28.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: source-like sheet mesh with stronger anatomy grooves and finger separation. Version: source_like_detail_fingers_mesh_v29. BoltWorks3D build: t_pose_source_like_detail_fingers_mesh_v29.
       </div>
     </footer>
   </main>
@@ -5251,11 +5251,14 @@
         carveAt(.5, .745, .5, .035, .20, .54, .16);
         const handY = .235;
         for (const side of [-1, 1]) {
-          const handX = side < 0 ? .055 : .945;
-          for (const gapY of [-.031, -.015, .002, .019]) {
-            carveAt(handX, handY + gapY, .5, .04, .0048, .20, .11);
+          const handX = side < 0 ? .065 : .935;
+          for (const gapY of [-.034, -.018, -.002, .014, .03]) {
+            carveAt(handX, handY + gapY, .5, .072, .0055, .25, .085);
           }
-          carveAt(handX - side * .042, handY + .004, .5, .018, .028, .15, .18);
+          for (const gapZ of [.38, .46, .54, .62]) {
+            carveAt(handX, handY + .001, gapZ, .064, .028, .012, .095);
+          }
+          carveAt(handX - side * .045, handY + .004, .5, .024, .034, .18, .16);
         }
       };
       const fillShortInternalGaps = passes => {
@@ -5340,7 +5343,11 @@
       const detailContrastStrength = 0;
       const centerGrooveStrength = formStrength * .7;
       const halfDepthStrength = formStrength * .18;
-      const clampDetail = amount => Math.max(-formStrength * .72, Math.min(formStrength * 1.05, amount));
+      const clampDetail = amount => {
+        const min = isMeshRemake ? -formStrength * 1.05 : -formStrength * .72;
+        const max = isMeshRemake ? formStrength * 1.45 : formStrength * 1.05;
+        return Math.max(min, Math.min(max, amount));
+      };
       const bell = (value, center, width) => Math.exp(-Math.pow((value - center) / Math.max(.001, width), 2));
       const detailFromPixel = pixel => {
         const raw = darkForeground
@@ -5384,10 +5391,16 @@
         const leftFormLobe = bell(nx, .38, .085);
         const rightFormLobe = bell(nx, .62, .085);
         const pairedLobes = Math.max(leftFormLobe, rightFormLobe);
-        const meshFrontChestVolume = isMeshRemake && view === "front" ? pairedLobes * chestBand * formStrength * .88 : 0;
-        const meshBackButtVolume = isMeshRemake && view === "back" ? pairedLobes * hipBand * formStrength * 1.05 : 0;
-        const meshSideChestVolume = isMeshRemake && view === "side" ? bell(nx, .24, .095) * chestBand * formStrength * .44 : 0;
-        const meshSideButtVolume = isMeshRemake && view === "side" ? bell(nx, .78, .11) * hipBand * formStrength * .68 : 0;
+        const breastLowerBand = bell(ny, .352, .022);
+        const buttLowerBand = bell(ny, .622, .032);
+        const meshFrontChestVolume = isMeshRemake && view === "front" ? pairedLobes * chestBand * formStrength * 1.22 : 0;
+        const meshChestCenterGroove = isMeshRemake && view === "front" ? -bell(nx, .5, .032) * chestBand * formStrength * .86 : 0;
+        const meshUnderBreastGroove = isMeshRemake && view === "front" ? -pairedLobes * breastLowerBand * formStrength * .44 : 0;
+        const meshBackButtVolume = isMeshRemake && view === "back" ? pairedLobes * hipBand * formStrength * 1.38 : 0;
+        const meshButtCenterGroove = isMeshRemake && view === "back" ? -bell(nx, .5, .034) * hipBand * formStrength * 1.06 : 0;
+        const meshUnderButtGroove = isMeshRemake && view === "back" ? -pairedLobes * buttLowerBand * formStrength * .46 : 0;
+        const meshSideChestVolume = isMeshRemake && view === "side" ? bell(nx, .235, .09) * chestBand * formStrength * .66 : 0;
+        const meshSideButtVolume = isMeshRemake && view === "side" ? bell(nx, .805, .105) * hipBand * formStrength * .96 : 0;
         const frontChestVolume = view === "front" ? pairedLobes * chestBand * formStrength * (isMeshRemake ? .18 : .48) : 0;
         const frontRibVolume = view === "front" ? bell(nx, .5, .20) * torsoBand * formStrength * .022 : 0;
         const backShoulderVolume = view === "back" ? bell(nx, .5, .30) * shoulderBand * formStrength * .09 : 0;
@@ -5402,7 +5415,7 @@
         const halfShoulderBand = bell(halfT, .72, .34);
         const halfCutValley = halfMode === "full" ? 0 : -halfCutBand * Math.max(backBand, .28) * halfDepthStrength * (scaffoldFace ? .35 : 1);
         const halfOuterRise = halfMode === "full" ? 0 : halfShoulderBand * halfDepthStrength * .12;
-        const softScaffoldForm = absoluteVolume + darkGrooveBoost + frontChestVolume + frontRibVolume + backShoulderVolume + backHipVolume + meshFrontChestVolume + meshBackButtVolume + meshSideChestVolume + meshSideButtVolume + halfCutValley + halfOuterRise;
+        const softScaffoldForm = absoluteVolume + darkGrooveBoost + frontChestVolume + frontRibVolume + backShoulderVolume + backHipVolume + meshFrontChestVolume + meshChestCenterGroove + meshUnderBreastGroove + meshBackButtVolume + meshButtCenterGroove + meshUnderButtGroove + meshSideChestVolume + meshSideButtVolume + halfCutValley + halfOuterRise;
         return clampDetail(softScaffoldForm * scaffoldDetailScale + centerGroove);
       };
       const displacePoint = (p, direction, amount) => [
@@ -5420,7 +5433,7 @@
         return { p: point(x, y, z), uv: [u, vv] };
       };
       const polishLevel = isMeshRemake ? Math.max(1, smoothPasses + 1) : Math.max(1, smoothPasses - 1);
-      const maxPatchSpan = Math.max(3, 9 - Math.min(6, Math.max(1, smoothPasses)));
+      const maxPatchSpan = isMeshRemake ? Math.max(2, 6 - Math.min(4, Math.max(1, smoothPasses))) : Math.max(3, 9 - Math.min(6, Math.max(1, smoothPasses)));
       const mix = (a, b, t) => a + (b - a) * t;
       const mixArray = (a, b, t) => a.map((value, index) => mix(value, b[index], t));
       const mixVertex = (a, b, t) => ({ p: mixArray(a.p, b.p, t), uv: mixArray(a.uv, b.uv, t) });
@@ -5564,7 +5577,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: isMeshRemake ? "sourceLikeSurfaceAnatomyMeshV28" : "viewSheetHeightmapArmTubeSeparationV20", buildMode: isMeshRemake ? "meshRebuild" : "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: !isMeshRemake, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: !isMeshRemake, wideBodyScaffold: !isMeshRemake, preservedArmSpanGuides: !isMeshRemake, filledScaffoldFaces: !isMeshRemake, strongerArmGuides: !isMeshRemake, closedInternalSkin: !isMeshRemake, calmerScaffoldCarving: !isMeshRemake, armTubeSeparation: !isMeshRemake, controlledLegGap: !isMeshRemake, trimmedHipRuns: !isMeshRemake, sourceLikeSheetMesh: isMeshRemake, splitArmMeshRemake: isMeshRemake, sourceLikeSurfaceAnatomyMesh: isMeshRemake, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: isMeshRemake ? "sourceLikeDetailFingersMeshV29" : "viewSheetHeightmapArmTubeSeparationV20", buildMode: isMeshRemake ? "meshRebuild" : "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: !isMeshRemake, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: !isMeshRemake, wideBodyScaffold: !isMeshRemake, preservedArmSpanGuides: !isMeshRemake, filledScaffoldFaces: !isMeshRemake, strongerArmGuides: !isMeshRemake, closedInternalSkin: !isMeshRemake, calmerScaffoldCarving: !isMeshRemake, armTubeSeparation: !isMeshRemake, controlledLegGap: !isMeshRemake, trimmedHipRuns: !isMeshRemake, sourceLikeSheetMesh: isMeshRemake, splitArmMeshRemake: isMeshRemake, sourceLikeDetailFingersMesh: isMeshRemake, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
