@@ -1362,7 +1362,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: source-like sheet mesh with form, leg split, and finger grooves. Version: source_like_anatomy_mesh_v27. BoltWorks3D build: t_pose_source_like_anatomy_mesh_v27.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: source-like sheet mesh with attached surface anatomy and leg split. Version: source_like_surface_anatomy_mesh_v28. BoltWorks3D build: t_pose_source_like_surface_anatomy_mesh_v28.
       </div>
     </footer>
   </main>
@@ -5185,12 +5185,6 @@
         addFormEllipsoid(.5, .382, .35, .122, .052, .034, slabGuideScale);
         addFormEllipsoid(.5, .405, .66, .122, .052, .034, slabGuideScale);
       }
-      if (isMeshRemake) {
-        addFormEllipsoid(.405, .312, .145, .072, .046, .112, .92);
-        addFormEllipsoid(.595, .312, .145, .072, .046, .112, .92);
-        addFormEllipsoid(.40, .555, .835, .095, .062, .122, .96);
-        addFormEllipsoid(.60, .555, .835, .095, .062, .122, .96);
-      }
 
       // Compact side fill: connect short internal gaps across depth/width so thin limbs
       // and torso slices become solid instead of see-through, without growing the outer silhouette.
@@ -5390,10 +5384,14 @@
         const leftFormLobe = bell(nx, .38, .085);
         const rightFormLobe = bell(nx, .62, .085);
         const pairedLobes = Math.max(leftFormLobe, rightFormLobe);
-        const frontChestVolume = view === "front" ? pairedLobes * chestBand * formStrength * .48 : 0;
+        const meshFrontChestVolume = isMeshRemake && view === "front" ? pairedLobes * chestBand * formStrength * .88 : 0;
+        const meshBackButtVolume = isMeshRemake && view === "back" ? pairedLobes * hipBand * formStrength * 1.05 : 0;
+        const meshSideChestVolume = isMeshRemake && view === "side" ? bell(nx, .24, .095) * chestBand * formStrength * .44 : 0;
+        const meshSideButtVolume = isMeshRemake && view === "side" ? bell(nx, .78, .11) * hipBand * formStrength * .68 : 0;
+        const frontChestVolume = view === "front" ? pairedLobes * chestBand * formStrength * (isMeshRemake ? .18 : .48) : 0;
         const frontRibVolume = view === "front" ? bell(nx, .5, .20) * torsoBand * formStrength * .022 : 0;
         const backShoulderVolume = view === "back" ? bell(nx, .5, .30) * shoulderBand * formStrength * .09 : 0;
-        const backHipVolume = view === "back" ? pairedLobes * hipBand * formStrength * .68 : 0;
+        const backHipVolume = view === "back" ? pairedLobes * hipBand * formStrength * (isMeshRemake ? .22 : .68) : 0;
         const scaffoldFace = useSideBodyScaffold && (view === "front" || view === "back");
         const scaffoldDetailScale = scaffoldFace ? .16 : 1;
         const scaffoldGrooveScale = scaffoldFace ? .08 : 1;
@@ -5404,7 +5402,7 @@
         const halfShoulderBand = bell(halfT, .72, .34);
         const halfCutValley = halfMode === "full" ? 0 : -halfCutBand * Math.max(backBand, .28) * halfDepthStrength * (scaffoldFace ? .35 : 1);
         const halfOuterRise = halfMode === "full" ? 0 : halfShoulderBand * halfDepthStrength * .12;
-        const softScaffoldForm = absoluteVolume + darkGrooveBoost + frontChestVolume + frontRibVolume + backShoulderVolume + backHipVolume + halfCutValley + halfOuterRise;
+        const softScaffoldForm = absoluteVolume + darkGrooveBoost + frontChestVolume + frontRibVolume + backShoulderVolume + backHipVolume + meshFrontChestVolume + meshBackButtVolume + meshSideChestVolume + meshSideButtVolume + halfCutValley + halfOuterRise;
         return clampDetail(softScaffoldForm * scaffoldDetailScale + centerGroove);
       };
       const displacePoint = (p, direction, amount) => [
@@ -5566,7 +5564,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: isMeshRemake ? "sourceLikeAnatomyMeshV27" : "viewSheetHeightmapArmTubeSeparationV20", buildMode: isMeshRemake ? "meshRebuild" : "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: !isMeshRemake, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: !isMeshRemake, wideBodyScaffold: !isMeshRemake, preservedArmSpanGuides: !isMeshRemake, filledScaffoldFaces: !isMeshRemake, strongerArmGuides: !isMeshRemake, closedInternalSkin: !isMeshRemake, calmerScaffoldCarving: !isMeshRemake, armTubeSeparation: !isMeshRemake, controlledLegGap: !isMeshRemake, trimmedHipRuns: !isMeshRemake, sourceLikeSheetMesh: isMeshRemake, splitArmMeshRemake: isMeshRemake, sourceLikeAnatomyMesh: isMeshRemake, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: isMeshRemake ? "sourceLikeSurfaceAnatomyMeshV28" : "viewSheetHeightmapArmTubeSeparationV20", buildMode: isMeshRemake ? "meshRebuild" : "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: !isMeshRemake, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: !isMeshRemake, wideBodyScaffold: !isMeshRemake, preservedArmSpanGuides: !isMeshRemake, filledScaffoldFaces: !isMeshRemake, strongerArmGuides: !isMeshRemake, closedInternalSkin: !isMeshRemake, calmerScaffoldCarving: !isMeshRemake, armTubeSeparation: !isMeshRemake, controlledLegGap: !isMeshRemake, trimmedHipRuns: !isMeshRemake, sourceLikeSheetMesh: isMeshRemake, splitArmMeshRemake: isMeshRemake, sourceLikeSurfaceAnatomyMesh: isMeshRemake, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
