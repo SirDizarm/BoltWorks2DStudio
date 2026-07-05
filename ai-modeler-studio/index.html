@@ -1362,7 +1362,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: source-like female sheet mesh with scaffolded mannequin proportions, calmer surface detail, and smooth white material. Version: source_like_female_scaffold_mesh_v32. BoltWorks3D build: t_pose_source_like_female_scaffold_mesh_v32.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: source-like female sheet mesh with controlled T-pose arms, centered side depth, calmer source-row noise, and smooth white material. Version: source_like_controlled_arm_mesh_v33. BoltWorks3D build: t_pose_source_like_controlled_arm_mesh_v33.
       </div>
     </footer>
   </main>
@@ -4994,7 +4994,7 @@
           runFromNorm(.555, footWidth, "rightFoot")
         ].filter(Boolean);
       };
-      const sourceLikeFemaleBodyRuns = (y, rawRuns) => {
+      const sourceLikeFemaleBodyRuns = y => {
         const ny = y / Math.max(1, gridY - 1);
         const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
         const smooth = (edge0, edge1, value) => {
@@ -5033,8 +5033,6 @@
           runs.push(runFromNorm(.445, foot, "leftFoot"));
           runs.push(runFromNorm(.555, foot, "rightFoot"));
         }
-        const armRuns = splitTPoseArmRuns(rawRuns, y).filter(run => /Arm$/.test(run.role || ""));
-        if (ny >= .19 && ny <= .34 && armRuns.length) runs.push(...armRuns);
         return mergeRuns(runs.filter(Boolean));
       };
       const sourceLikeFemaleSideProfile = y => {
@@ -5057,16 +5055,16 @@
           const chestDepth = bell(ny, .318, .075) * .135;
           const upperBack = bell(ny, .255, .07) * .065;
           const waistCut = bell(ny, .445, .08) * .055;
-          return runFromNorm(.52, .235 + chestDepth + upperBack - waistCut, "torso");
+          return runFromNorm(.5, .235 + chestDepth + upperBack - waistCut, "torso");
         }
-        if (ny < .705) return runFromNorm(.57, .27 + bell(ny, .59, .075) * .145, "hip");
+        if (ny < .705) return runFromNorm(.5, .27 + bell(ny, .59, .075) * .145, "hip");
         if (ny < .925) {
           const thigh = bell(ny, .705, .09) * .065;
           const calf = bell(ny, .825, .07) * .045;
           const ankleCut = bell(ny, .91, .05) * .045;
-          return runFromNorm(.51, .15 + thigh + calf - ankleCut, "leg");
+          return runFromNorm(.5, .15 + thigh + calf - ankleCut, "leg");
         }
-        return runFromNorm(.47, .13 + bell(ny, .955, .025) * .075, "foot");
+        return runFromNorm(.5, .13 + bell(ny, .955, .025) * .075, "foot");
       };
       const sideProfiles = [];
       const bodyRuns = [];
@@ -5087,7 +5085,7 @@
         const bodySide = isMeshRemake ? sourceLikeFemaleSideProfile(y) : measuredSide;
         sideProfiles[y] = bodySide;
         const rawRuns = rowRuns(unionMask, gridX, 0);
-        bodyRuns[y] = useSideBodyScaffold ? sideSilhouetteBodyRuns(y, bodySide) : (isMeshRemake ? sourceLikeFemaleBodyRuns(y, rawRuns) : rawRuns);
+        bodyRuns[y] = useSideBodyScaffold ? sideSilhouetteBodyRuns(y, bodySide) : (isMeshRemake ? sourceLikeFemaleBodyRuns(y) : rawRuns);
       }
       let voxelCount = 0;
       for (let y = 0; y < gridY; y++) {
@@ -5151,8 +5149,8 @@
             }
           }
         };
-        const armRadiusY = Math.max(1.85, gridY * .026);
-        const armRadiusZ = Math.max(2.0, gridZ * .092);
+        const armRadiusY = Math.max(1.55, gridY * (isMeshRemake ? .021 : .026));
+        const armRadiusZ = Math.max(1.7, gridZ * (isMeshRemake ? .072 : .092));
         const addArmSide = (shoulderX, wristX, sideSign) => {
           const minX = Math.max(1, Math.min(shoulderX, wristX));
           const maxX = Math.min(gridX - 2, Math.max(shoulderX, wristX));
@@ -5177,28 +5175,42 @@
               }
             }
           }
-          addVoxelEllipsoid(wristX, armY + gridY * .008, zCenter, gridX * .03, gridY * .036, gridZ * .082);
+          addVoxelEllipsoid(
+            wristX,
+            armY + gridY * .008,
+            zCenter,
+            gridX * (isMeshRemake ? .025 : .03),
+            gridY * (isMeshRemake ? .03 : .036),
+            gridZ * (isMeshRemake ? .066 : .082)
+          );
           const fingerStart = wristX + sideSign * Math.max(1, gridX * .012);
           for (let i = -2; i <= 2; i++) {
             const fingerY = armY + i * gridY * .006;
-            addVoxelEllipsoid(fingerStart + sideSign * gridX * .018, fingerY, zCenter + i * gridZ * .014, gridX * .018, gridY * .008, gridZ * .024);
+            addVoxelEllipsoid(
+              fingerStart + sideSign * gridX * .018,
+              fingerY,
+              zCenter + i * gridZ * .014,
+              gridX * .018,
+              gridY * (isMeshRemake ? .0065 : .008),
+              gridZ * (isMeshRemake ? .018 : .024)
+            );
           }
         };
         addArmSide(Math.floor(gridX * .36), Math.floor(gridX * .005), -1);
         addArmSide(Math.ceil(gridX * .64), Math.ceil(gridX * .995), 1);
-        const shoulderRadiusY = Math.max(2.15, gridY * .034);
-        const shoulderRadiusZ = Math.max(2.25, gridZ * .102);
-        for (let x = Math.floor(gridX * .32); x <= Math.ceil(gridX * .68); x++) {
+        const shoulderRadiusY = Math.max(1.8, gridY * (isMeshRemake ? .026 : .034));
+        const shoulderRadiusZ = Math.max(1.95, gridZ * (isMeshRemake ? .076 : .102));
+        for (let x = Math.floor(gridX * .34); x <= Math.ceil(gridX * .66); x++) {
           for (let y = Math.floor(shoulderY - shoulderRadiusY); y <= Math.ceil(shoulderY + shoulderRadiusY); y++) {
             for (let z = Math.floor(zCenter - shoulderRadiusZ); z <= Math.ceil(zCenter + shoulderRadiusZ); z++) {
               const nx = (x + .5) / gridX;
               const shoulderLobe = Math.max(
-                Math.exp(-Math.pow((nx - .36) / .085, 2)),
-                Math.exp(-Math.pow((nx - .64) / .085, 2))
+                Math.exp(-Math.pow((nx - .36) / (isMeshRemake ? .055 : .085), 2)),
+                Math.exp(-Math.pow((nx - .64) / (isMeshRemake ? .055 : .085), 2))
               );
               const yPart = Math.pow((y + .5 - shoulderY) / Math.max(.5, shoulderRadiusY), 2);
               const zPart = Math.pow((z + .5 - zCenter) / Math.max(.5, shoulderRadiusZ), 2);
-              if (shoulderLobe > .2 && yPart + zPart <= 1.15) addVoxel(x, y, z);
+              if (shoulderLobe > (isMeshRemake ? .34 : .2) && yPart + zPart <= (isMeshRemake ? 1.02 : 1.15)) addVoxel(x, y, z);
             }
           }
         }
@@ -5260,6 +5272,12 @@
         addFormEllipsoid(.62, .305, .155, .068, .044, .096, pairedGuideScale);
         addFormEllipsoid(.5, .382, .35, .122, .052, .034, slabGuideScale);
         addFormEllipsoid(.5, .405, .66, .122, .052, .034, slabGuideScale);
+      } else {
+        addFormEllipsoid(.39, .31, .16, .055, .036, .07, .82);
+        addFormEllipsoid(.61, .31, .16, .055, .036, .07, .82);
+        addFormEllipsoid(.39, .585, .82, .07, .07, .105, .88);
+        addFormEllipsoid(.61, .585, .82, .07, .07, .105, .88);
+        carveFormGroove(.5, .64, .5, .03, .155, .42);
       }
 
       // Compact side fill: connect short internal gaps across depth/width so thin limbs
@@ -5389,7 +5407,7 @@
           for (const [x, y, z] of candidates) addVoxel(x, y, z);
         }
       };
-      if (!isMeshRemake) addTPoseArmTubes();
+      addTPoseArmTubes();
       fillShortInternalGaps(isMeshRemake ? 1 : (detailedHalfSheet ? 3 : 1));
       closeSkinGaps(isMeshRemake ? 1 : (detailedHalfSheet ? 4 : 1));
       if (isMeshRemake) {
@@ -5661,7 +5679,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: isMeshRemake ? "sourceLikeFemaleScaffoldMeshV32" : "viewSheetHeightmapArmTubeSeparationV20", buildMode: isMeshRemake ? "meshRebuild" : "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, sourceLikeMeshScale, guidedFormVolumes: !isMeshRemake, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: !isMeshRemake, wideBodyScaffold: !isMeshRemake, preservedArmSpanGuides: !isMeshRemake, filledScaffoldFaces: !isMeshRemake, strongerArmGuides: !isMeshRemake, closedInternalSkin: !isMeshRemake, calmerScaffoldCarving: !isMeshRemake, armTubeSeparation: !isMeshRemake, controlledLegGap: !isMeshRemake, trimmedHipRuns: !isMeshRemake, sourceLikeSheetMesh: isMeshRemake, splitArmMeshRemake: isMeshRemake, sourceLikeLowerDetailScaleMesh: isMeshRemake, sourceLikeImageAlignedMesh: isMeshRemake, sourceLikeFemaleScaffoldMesh: isMeshRemake, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: isMeshRemake ? "sourceLikeControlledArmMeshV33" : "viewSheetHeightmapArmTubeSeparationV20", buildMode: isMeshRemake ? "meshRebuild" : "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, sourceLikeMeshScale, guidedFormVolumes: !isMeshRemake, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: !isMeshRemake, wideBodyScaffold: !isMeshRemake, preservedArmSpanGuides: !isMeshRemake, filledScaffoldFaces: !isMeshRemake, strongerArmGuides: !isMeshRemake, closedInternalSkin: !isMeshRemake, calmerScaffoldCarving: !isMeshRemake, armTubeSeparation: !isMeshRemake, controlledLegGap: !isMeshRemake, trimmedHipRuns: !isMeshRemake, sourceLikeSheetMesh: isMeshRemake, splitArmMeshRemake: isMeshRemake, sourceLikeLowerDetailScaleMesh: isMeshRemake, sourceLikeImageAlignedMesh: isMeshRemake, sourceLikeFemaleScaffoldMesh: isMeshRemake, sourceLikeControlledArmMesh: isMeshRemake, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
