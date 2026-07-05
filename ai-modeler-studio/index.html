@@ -1362,7 +1362,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: new surface mesh sheet remaker. Version: sheet_surface_mesh_remake_v22. BoltWorks3D build: t_pose_sheet_surface_mesh_remake_v22.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: image-driven silhouette mesh remaker. Version: sheet_silhouette_mesh_v23. BoltWorks3D build: t_pose_sheet_silhouette_mesh_v23.
       </div>
     </footer>
   </main>
@@ -4349,6 +4349,253 @@
       };
     }
 
+    function createSheetSilhouetteMeshV23Geometry({ scale, depth, back, threshold, darkForeground, imageData, viewRects, bodyPreset = "auto", sourceName = "" }) {
+      const positions = [];
+      const uvs = [];
+      const sampleCols = 104;
+      const sampleRows = 156;
+      const sampleDepth = 56;
+      const meshH = scale;
+      const meshW = scale * .86;
+      const meshD = Math.max(back, depth, .25) * 2.15;
+      const [frontRect, sideRect, backRect] = viewRects;
+      const nameHint = String(sourceName || "").toLowerCase();
+      const resolvedPreset = bodyPreset === "auto"
+        ? (/female|woman|girl|boob|breast|bust|curvy/.test(nameHint) ? "female" : (/male|man|boy|muscle|pec|bodybuilder/.test(nameHint) ? "male" : "female"))
+        : bodyPreset;
+      const isFemale = resolvedPreset === "female";
+      const isMale = resolvedPreset === "male";
+      const viewRatio = rect => rect && rect.h ? rect.w / rect.h : .26;
+      const sideRatio = Math.max(.12, Math.min(.34, viewRatio(sideRect)));
+      const depthScale = Math.max(.82, Math.min(1.18, sideRatio / .22));
+      const edgeMargin = Math.max(3, imageData.width * .018);
+      const pushTri = (a, b, c) => {
+        positions.push(...a.p, ...b.p, ...c.p);
+        uvs.push(...a.uv, ...b.uv, ...c.uv);
+      };
+      const pushQuad = (a, b, c, d) => {
+        pushTri(a, b, c);
+        pushTri(a, c, d);
+      };
+      const sampleRect = (rect, nx, ny) => {
+        if (!rect) return [0, 0, 0, 0];
+        const sx = rect.x + Math.max(0, Math.min(1, nx)) * Math.max(1, rect.w - 1);
+        const sy = rect.y + Math.max(0, Math.min(1, ny)) * Math.max(1, rect.h - 1);
+        return sampleReliefPixel(imageData, imageData.width, imageData.height, sx, sy);
+      };
+      const viewHalfMode = rect => {
+        const touchesLeft = rect.x <= edgeMargin;
+        const touchesRight = rect.x + rect.w >= imageData.width - edgeMargin;
+        if (!touchesLeft && !touchesRight) return "full";
+        if (rect.w > imageData.width * .42) return "full";
+        return touchesLeft ? "centerToOuter" : "outerToCenter";
+      };
+      const frontHalfMode = viewHalfMode(frontRect);
+      const backHalfMode = viewHalfMode(backRect);
+      const halfViewNx = (fullNx, mode) => {
+        const nx = Math.max(0, Math.min(1, fullNx));
+        if (mode === "centerToOuter") return Math.abs(nx - .5) * 2;
+        if (mode === "outerToCenter") return Math.min(nx, 1 - nx) * 2;
+        return nx;
+      };
+      const sampleView = (view, nx, ny) => {
+        if (view === "front") return sampleRect(frontRect, halfViewNx(nx, frontHalfMode), ny);
+        if (view === "back") return sampleRect(backRect, halfViewNx(nx, backHalfMode), ny);
+        return sampleRect(sideRect, nx, ny);
+      };
+      const frontMask = new Array(sampleCols * sampleRows).fill(false);
+      const backMask = new Array(sampleCols * sampleRows).fill(false);
+      const sideMask = new Array(sampleDepth * sampleRows).fill(false);
+      for (let y = 0; y < sampleRows; y++) {
+        const ny = y / Math.max(1, sampleRows - 1);
+        for (let x = 0; x < sampleCols; x++) {
+          const nx = x / Math.max(1, sampleCols - 1);
+          frontMask[y * sampleCols + x] = reliefForegroundCheck(sampleView("front", nx, ny), threshold, darkForeground);
+          backMask[y * sampleCols + x] = reliefForegroundCheck(sampleView("back", nx, ny), threshold, darkForeground);
+        }
+        for (let z = 0; z < sampleDepth; z++) {
+          const nz = z / Math.max(1, sampleDepth - 1);
+          sideMask[y * sampleDepth + z] = reliefForegroundCheck(sampleView("side", nz, ny), threshold, darkForeground);
+        }
+      }
+      const rowRuns = (mask, width, row) => {
+        const runs = [];
+        let start = -1;
+        for (let x = 0; x <= width; x++) {
+          const active = x < width && mask[row * width + x];
+          if (active && start < 0) start = x;
+          if ((!active || x === width) && start >= 0) {
+            const end = x - 1;
+            runs.push({ start, end, width: end - start + 1, center: (start + end) * .5 });
+            start = -1;
+          }
+        }
+        return runs;
+      };
+      const unionRunsAt = row => {
+        const merged = new Array(sampleCols).fill(false);
+        for (let x = 0; x < sampleCols; x++) merged[x] = frontMask[row * sampleCols + x] || backMask[row * sampleCols + x];
+        return rowRuns(merged, sampleCols, 0);
+      };
+      const centralRun = (runs, center, maxDistance) => {
+        let best = null;
+        for (const run of runs) {
+          const distance = Math.abs(run.center - center);
+          if (distance > maxDistance) continue;
+          const score = run.width - distance * .45;
+          if (!best || score > best.score) best = { ...run, score };
+        }
+        return best;
+      };
+      const sideRunAt = row => {
+        const runs = rowRuns(sideMask, sampleDepth, row);
+        return centralRun(runs, (sampleDepth - 1) * .5, sampleDepth * .45) || runs.sort((a, b) => b.width - a.width)[0] || null;
+      };
+      const bodyRows = [];
+      for (let row = 2; row < sampleRows - 2; row++) {
+        const ny = row / Math.max(1, sampleRows - 1);
+        const run = centralRun(unionRunsAt(row), (sampleCols - 1) * .5, sampleCols * .32);
+        const depthRun = sideRunAt(row);
+        if (!run || !depthRun || run.width < 3) continue;
+        bodyRows.push({
+          ny,
+          y: (.5 - ny) * meshH,
+          rawRx: Math.max(.035, (run.width / sampleCols) * meshW * .52),
+          rawRz: Math.max(.035, (depthRun.width / sampleDepth) * meshD * .48 * depthScale)
+        });
+      }
+      const waistWidths = bodyRows.filter(row => row.ny > .34 && row.ny < .62).map(row => row.rawRx).sort((a, b) => a - b);
+      const torsoCap = Math.max(meshW * .09, waistWidths[Math.floor(waistWidths.length * .72)] || meshW * .18);
+      const bodyRings = bodyRows.map((entry, i, list) => {
+        const window = list.slice(Math.max(0, i - 2), Math.min(list.length, i + 3));
+        let rx = window.reduce((sum, row) => sum + row.rawRx, 0) / window.length;
+        let rz = window.reduce((sum, row) => sum + row.rawRz, 0) / window.length;
+        if (entry.ny > .17 && entry.ny < .36) rx = Math.min(rx, torsoCap * (isMale ? 1.36 : 1.22));
+        if (entry.ny > .54 && entry.ny < .76) rx *= isFemale ? 1.08 : 1;
+        if (entry.ny > .25 && entry.ny < .46 && isFemale) rz *= 1.06;
+        if (entry.ny > .56 && entry.ny < .76 && isFemale) rz *= 1.12;
+        return { cx: 0, y: entry.y, cz: 0, rx, rz, ny: entry.ny };
+      });
+      let surfaceSections = 0;
+      const ringPoint = (ring, angle, v = 0) => ({
+        p: [ring.cx + Math.cos(angle) * ring.rx, ring.y, ring.cz + Math.sin(angle) * ring.rz],
+        uv: [angle / (Math.PI * 2), v]
+      });
+      const addRingStack = (rings, segments = 32) => {
+        if (rings.length < 2) return;
+        surfaceSections++;
+        for (let r = 0; r < rings.length - 1; r++) {
+          const a = rings[r];
+          const b = rings[r + 1];
+          for (let s = 0; s < segments; s++) {
+            const t0 = (s / segments) * Math.PI * 2;
+            const t1 = ((s + 1) / segments) * Math.PI * 2;
+            pushQuad(ringPoint(a, t0, r / rings.length), ringPoint(b, t0, (r + 1) / rings.length), ringPoint(b, t1, (r + 1) / rings.length), ringPoint(a, t1, r / rings.length));
+          }
+        }
+      };
+      const addTubeX = (x0, x1, y0, z0, yRadius0, zRadius0, yRadius1 = yRadius0, zRadius1 = zRadius0, rings = 18, segments = 18) => {
+        const stack = [];
+        for (let i = 0; i <= rings; i++) {
+          const t = i / rings;
+          const cap = Math.sin(Math.max(.08, Math.min(.92, t)) * Math.PI);
+          stack.push({
+            cx: x0 + (x1 - x0) * t,
+            y: y0,
+            cz: z0,
+            rx: (yRadius0 + (yRadius1 - yRadius0) * t) * (.86 + cap * .14),
+            rz: (zRadius0 + (zRadius1 - zRadius0) * t) * (.86 + cap * .14)
+          });
+        }
+        surfaceSections++;
+        for (let r = 0; r < stack.length - 1; r++) {
+          const a = stack[r];
+          const b = stack[r + 1];
+          for (let s = 0; s < segments; s++) {
+            const t0 = (s / segments) * Math.PI * 2;
+            const t1 = ((s + 1) / segments) * Math.PI * 2;
+            const va = (ring, angle, u) => ({ p: [ring.cx, ring.y + Math.cos(angle) * ring.rx, ring.cz + Math.sin(angle) * ring.rz], uv: [u, angle / (Math.PI * 2)] });
+            pushQuad(va(a, t0, r / stack.length), va(b, t0, (r + 1) / stack.length), va(b, t1, (r + 1) / stack.length), va(a, t1, r / stack.length));
+          }
+        }
+      };
+      const addTubeY = (x0, y0, y1, z0, xRadius0, zRadius0, xRadius1 = xRadius0, zRadius1 = zRadius0, rings = 22, segments = 18) => {
+        const stack = [];
+        for (let i = 0; i <= rings; i++) {
+          const t = i / rings;
+          stack.push({ cx: x0, y: y0 + (y1 - y0) * t, cz: z0, rx: xRadius0 + (xRadius1 - xRadius0) * t, rz: zRadius0 + (zRadius1 - zRadius0) * t });
+        }
+        addRingStack(stack, segments);
+      };
+      addRingStack(bodyRings, 36);
+      const bodyRadiusAt = ny => {
+        let best = bodyRings[0] || { rx: meshW * .08, rz: meshD * .08, y: 0, ny: .5 };
+        let bestDistance = Infinity;
+        for (const ring of bodyRings) {
+          const distance = Math.abs(ring.ny - ny);
+          if (distance < bestDistance) {
+            best = ring;
+            bestDistance = distance;
+          }
+        }
+        return best;
+      };
+      const armRows = [];
+      for (let row = Math.floor(sampleRows * .18); row < Math.floor(sampleRows * .36); row++) {
+        const ny = row / Math.max(1, sampleRows - 1);
+        const runs = unionRunsAt(row);
+        const torso = bodyRadiusAt(ny);
+        const shoulderWidth = Math.max(torso.rx / meshW * sampleCols * 2.2, sampleCols * .13);
+        const wideRun = runs.find(run => run.width > shoulderWidth * 1.45 && run.start < sampleCols * .18 && run.end > sampleCols * .82);
+        if (wideRun) armRows.push({ row, ny, run: wideRun });
+      }
+      const armSeed = armRows[Math.floor(armRows.length * .55)] || null;
+      if (armSeed) {
+        const y = (.5 - armSeed.ny) * meshH;
+        const shoulder = bodyRadiusAt(armSeed.ny).rx * 1.08;
+        const leftEnd = (armSeed.run.start / Math.max(1, sampleCols - 1) - .5) * meshW;
+        const rightEnd = (armSeed.run.end / Math.max(1, sampleCols - 1) - .5) * meshW;
+        const armThickness = Math.max(meshH * .022, Math.min(meshH * .052, meshH * (armRows.length / sampleRows) * .55));
+        addTubeX(-shoulder, leftEnd, y, 0, armThickness * 1.1, armThickness * .9 * depthScale, armThickness * .55, armThickness * .44 * depthScale, 24, 18);
+        addTubeX(shoulder, rightEnd, y, 0, armThickness * 1.1, armThickness * .9 * depthScale, armThickness * .55, armThickness * .44 * depthScale, 24, 18);
+        [-1, 1].forEach(side => {
+          const handX = side < 0 ? leftEnd : rightEnd;
+          for (let i = -2; i <= 2; i++) addTubeX(handX, handX + side * meshW * (.035 + Math.abs(i) * .005), y + i * armThickness * .42, 0, armThickness * .16, armThickness * .12, armThickness * .1, armThickness * .08, 4, 8);
+        });
+      }
+      const legRows = [];
+      for (let row = Math.floor(sampleRows * .58); row < Math.floor(sampleRows * .96); row++) {
+        const ny = row / Math.max(1, sampleRows - 1);
+        const runs = unionRunsAt(row).filter(run => run.width > 2);
+        const left = runs.filter(run => run.center < sampleCols * .48).sort((a, b) => b.width - a.width)[0];
+        const right = runs.filter(run => run.center > sampleCols * .52).sort((a, b) => b.width - a.width)[0];
+        if (left && right) legRows.push({ ny, left, right });
+      }
+      if (legRows.length > 5) {
+        const upper = legRows[Math.floor(legRows.length * .08)];
+        const lower = legRows[Math.floor(legRows.length * .92)];
+        const makeLeg = side => {
+          const topRun = side < 0 ? upper.left : upper.right;
+          const footRun = side < 0 ? lower.left : lower.right;
+          const xTop = (topRun.center / Math.max(1, sampleCols - 1) - .5) * meshW;
+          const xFoot = (footRun.center / Math.max(1, sampleCols - 1) - .5) * meshW;
+          const yTop = (.5 - upper.ny) * meshH;
+          const yFoot = (.5 - lower.ny) * meshH;
+          const rTop = Math.max(meshW * .026, (topRun.width / sampleCols) * meshW * .33);
+          const rFoot = Math.max(meshW * .018, (footRun.width / sampleCols) * meshW * .28);
+          addTubeY(xTop * .82 + xFoot * .18, yTop, yFoot, 0, rTop, rTop * .78 * depthScale, rFoot, rFoot * .78 * depthScale, 28, 18);
+          addTubeX(xFoot - side * meshW * .015, xFoot + side * meshW * .09, yFoot - meshH * .005, meshD * .16, rFoot * .42, rFoot * 1.15, rFoot * .34, rFoot * 1.5, 5, 12);
+        };
+        makeLeg(-1);
+        makeLeg(1);
+      }
+      return {
+        positions,
+        uvs,
+        meta: { mode: "sheetSilhouetteMeshV23", buildMode: "meshRebuild", bodyPreset, resolvedPreset, sourceName, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, depth, back, viewRects, sideRatio, depthScale, sampleCols, sampleRows, sampleDepth, frontHalfMode, backHalfMode, surfaceSections, silhouetteDriven: true, surfaceMeshExporter: true }
+      };
+    }
+
     function createSheetSurfaceMeshRemakeGeometry({ scale, depth, back, threshold, darkForeground, imageData, viewRects, bodyPreset = "auto", sourceName = "" }) {
       const positions = [];
       const uvs = [];
@@ -4475,7 +4722,7 @@
     function createReliefGeometryFromViewSheet({ imageData, cols, rows, scale, depth, back, threshold, smoothPasses, darkForeground, buildMode = "heightmap", bodyPreset = "auto", sourceName = "" }) {
       const viewRects = detectReliefViewRects(imageData, threshold, darkForeground);
       if (buildMode === "meshRebuild") {
-        return createSheetSurfaceMeshRemakeGeometry({ imageData, viewRects, scale, depth, back, threshold, darkForeground, bodyPreset, sourceName });
+        return createSheetSilhouetteMeshV23Geometry({ imageData, viewRects, scale, depth, back, threshold, darkForeground, bodyPreset, sourceName });
       }
       if (buildMode === "anatomy") {
         return createMannequinSheetRebuildGeometry({ imageData, viewRects, scale, depth, back, threshold, darkForeground, bodyPreset, sourceName });
