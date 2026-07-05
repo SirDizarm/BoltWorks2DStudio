@@ -1361,7 +1361,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: mirrored half-body heightmap with arm guides. Version: gen_heightmap_mirror_arms_v11. BoltWorks3D build: t_pose_gen_mirror_arms_v11.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: side-silhouette body scaffold with arm guides. Version: gen_heightmap_side_body_v12. BoltWorks3D build: t_pose_gen_side_body_v12.
       </div>
     </footer>
   </main>
@@ -4366,6 +4366,55 @@
         if (best.start < center && best.end > center && best.end - best.start > gridX * .22) return runs;
         return mergeRuns([best, mirrorRun(best)]);
       };
+      const sideSilhouetteBodyRuns = (y, sideRun) => {
+        const ny = y / Math.max(1, gridY - 1);
+        if (!sideRun) return [];
+        const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+        const smooth = (edge0, edge1, value) => {
+          const t = clamp((value - edge0) / Math.max(.0001, edge1 - edge0), 0, 1);
+          return t * t * (3 - 2 * t);
+        };
+        const bell = (value, center, width) => Math.exp(-Math.pow((value - center) / Math.max(.001, width), 2));
+        const runFromNorm = (center, width, role = "body") => {
+          const half = Math.max(.012, width * .5);
+          const start = clamp(Math.round((center - half) * gridX), 1, gridX - 2);
+          const end = clamp(Math.round((center + half) * gridX), 1, gridX - 2);
+          return end > start ? makeRun(start, end, role) : null;
+        };
+        if (ny < .185) {
+          const headWidth = .14 + bell(ny, .105, .06) * .095;
+          return [runFromNorm(.5, headWidth, "head")].filter(Boolean);
+        }
+        if (ny < .255) {
+          const neckToShoulder = smooth(.185, .255, ny);
+          return [runFromNorm(.5, .10 + neckToShoulder * .18, "neck")].filter(Boolean);
+        }
+        if (ny < .61) {
+          const shoulder = bell(ny, .285, .055) * .12;
+          const chest = bell(ny, .35, .12) * .12;
+          const waistCut = bell(ny, .50, .085) * .09;
+          const hip = bell(ny, .585, .075) * .14;
+          const width = .28 + shoulder + chest - waistCut + hip;
+          return [runFromNorm(.5, width, "torso")].filter(Boolean);
+        }
+        if (ny < .91) {
+          const thigh = bell(ny, .68, .095) * .085;
+          const kneeCut = bell(ny, .76, .04) * .025;
+          const calf = bell(ny, .825, .07) * .05;
+          const ankleCut = bell(ny, .90, .04) * .04;
+          const legWidth = .105 + thigh + calf - kneeCut - ankleCut;
+          const legSpread = .075 + smooth(.61, .72, ny) * .07;
+          return [
+            runFromNorm(.5 - legSpread, legWidth, "leftLeg"),
+            runFromNorm(.5 + legSpread, legWidth, "rightLeg")
+          ].filter(Boolean);
+        }
+        const footWidth = .11 + bell(ny, .94, .026) * .075;
+        return [
+          runFromNorm(.42, footWidth, "leftFoot"),
+          runFromNorm(.58, footWidth, "rightFoot")
+        ].filter(Boolean);
+      };
       const centeredMannequinBodyRuns = y => {
         const ny = y / Math.max(1, gridY - 1);
         const sideRuns = rowRuns(sideMask, gridZ, y);
@@ -4416,15 +4465,22 @@
       };
       const sideProfiles = [];
       const bodyRuns = [];
+      const useSideBodyScaffold = frontHalfMode !== "full" || backHalfMode !== "full";
       for (let y = 0; y < gridY; y++) {
         const unionRow = new Array(gridX).fill(false);
         for (let x = 0; x < gridX; x++) unionRow[x] = frontMask[y * gridX + x] || backMask[y * gridX + x];
         const unionMask = new Array(gridX).fill(false);
         for (let x = 0; x < gridX; x++) unionMask[x] = unionRow[x];
-        bodyRuns[y] = mirrorDominantHalfBodyRuns(rowRuns(unionMask, gridX, 0), y);
         const sideRuns = rowRuns(sideMask, gridZ, y);
-        const largestSide = sideRuns.sort((a, b) => (b.end - b.start) - (a.end - a.start))[0] || null;
-        sideProfiles[y] = largestSide;
+        const bodySide = sideRuns.sort((a, b) => {
+          const aw = a.end - a.start + 1;
+          const bw = b.end - b.start + 1;
+          const ac = 1 / (1 + Math.abs(a.center - gridZ * .5));
+          const bc = 1 / (1 + Math.abs(b.center - gridZ * .5));
+          return (bw + bc * 5) - (aw + ac * 5);
+        })[0] || null;
+        sideProfiles[y] = bodySide;
+        bodyRuns[y] = useSideBodyScaffold ? sideSilhouetteBodyRuns(y, bodySide) : rowRuns(unionMask, gridX, 0);
       }
       let voxelCount = 0;
       for (let y = 0; y < gridY; y++) {
@@ -4924,7 +4980,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetHeightmapMirrorArmsV11", buildMode: "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, mirroredHalfBodyRuns: true, armGuideTubes: true, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: "viewSheetHeightmapSideBodyV12", buildMode: "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, sideBodyScaffold: useSideBodyScaffold, armGuideTubes: true, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
