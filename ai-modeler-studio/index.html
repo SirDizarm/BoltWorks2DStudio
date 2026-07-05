@@ -1362,7 +1362,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: source-like sheet mesh with lower anatomy detail, cleaner leg gap, and smaller output scale. Version: source_like_lower_detail_scale_mesh_v30. BoltWorks3D build: t_pose_source_like_lower_detail_scale_mesh_v30.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: source-like sheet mesh with image-aligned surface detail and softer anatomy guides. Version: source_like_image_aligned_mesh_v31. BoltWorks3D build: t_pose_source_like_image_aligned_mesh_v31.
       </div>
     </footer>
   </main>
@@ -5340,14 +5340,14 @@
         pushTri(a, b, c);
         pushTri(a, c, d);
       };
-      const detailStrength = isMeshRemake ? Math.min(.018, Math.max(.006, depth * .009)) : Math.min(.035, Math.max(.01, depth * .018));
-      const formStrength = isMeshRemake ? Math.min(.125, Math.max(.045, depth * .085)) : Math.min(.18, Math.max(.055, depth * .135));
+      const detailStrength = isMeshRemake ? Math.min(.024, Math.max(.008, depth * .012)) : Math.min(.035, Math.max(.01, depth * .018));
+      const formStrength = isMeshRemake ? Math.min(.105, Math.max(.04, depth * .072)) : Math.min(.18, Math.max(.055, depth * .135));
       const detailContrastStrength = 0;
       const centerGrooveStrength = formStrength * .7;
       const halfDepthStrength = formStrength * .18;
       const clampDetail = amount => {
-        const min = isMeshRemake ? -formStrength * 1.05 : -formStrength * .72;
-        const max = isMeshRemake ? formStrength * 1.45 : formStrength * 1.05;
+        const min = isMeshRemake ? -formStrength * .9 : -formStrength * .72;
+        const max = isMeshRemake ? formStrength * 1.18 : formStrength * 1.05;
         return Math.max(min, Math.min(max, amount));
       };
       const bell = (value, center, width) => Math.exp(-Math.pow((value - center) / Math.max(.001, width), 2));
@@ -5379,6 +5379,9 @@
         const localAverage = count ? total / count : pixel.luma;
         const localContrast = (pixel.luma - localAverage) / 255;
         const signedContrast = darkForeground ? -localContrast : localContrast;
+        const sourceTone = isMeshRemake && pixel.a > 24 ? detailFromPixel(pixel) : 0;
+        const sourceToneDetail = isMeshRemake ? Math.max(-.55, Math.min(.72, sourceTone)) * detailStrength * (view === "side" ? 1.18 : .86) : 0;
+        const sourceEdgeDetail = isMeshRemake ? Math.max(-.55, Math.min(.55, signedContrast * 2.6)) * detailStrength * (view === "side" ? 1.25 : .88) : 0;
         const absoluteVolume = 0;
         const darkGrooveBoost = 0;
         const nx = view === "side" ? z / Math.max(1, gridZ) : x / Math.max(1, gridX);
@@ -5396,16 +5399,16 @@
         const pairedLobes = Math.max(leftFormLobe, rightFormLobe);
         const breastLowerBand = bell(ny, .383, .024);
         const buttLowerBand = bell(ny, .642, .034);
-        const meshFrontChestVolume = isMeshRemake && view === "front" ? pairedLobes * chestBand * formStrength * 1.36 : 0;
-        const meshUpperChestFlatten = isMeshRemake && view === "front" ? -bell(nx, .5, .24) * upperChestBand * formStrength * .52 : 0;
-        const meshChestCenterGroove = isMeshRemake && view === "front" ? -bell(nx, .5, .026) * chestBand * formStrength * 1.08 : 0;
-        const meshUnderBreastGroove = isMeshRemake && view === "front" ? -pairedLobes * breastLowerBand * formStrength * .64 : 0;
-        const meshBackButtVolume = isMeshRemake && view === "back" ? pairedLobes * hipBand * formStrength * 1.58 : 0;
-        const meshButtCenterGroove = isMeshRemake && view === "back" ? -bell(nx, .5, .026) * hipBand * formStrength * 1.42 : 0;
-        const meshUnderButtGroove = isMeshRemake && view === "back" ? -pairedLobes * buttLowerBand * formStrength * .64 : 0;
-        const meshPelvisCenterCut = isMeshRemake && (view === "front" || view === "back") ? -bell(nx, .5, .038) * bell(ny, .66, .09) * formStrength * .95 : 0;
-        const meshSideChestVolume = isMeshRemake && view === "side" ? bell(nx, .205, .085) * chestBand * formStrength * .82 : 0;
-        const meshSideButtVolume = isMeshRemake && view === "side" ? bell(nx, .82, .10) * hipBand * formStrength * 1.14 : 0;
+        const meshFrontChestVolume = isMeshRemake && view === "front" ? pairedLobes * chestBand * formStrength * .82 : 0;
+        const meshUpperChestFlatten = isMeshRemake && view === "front" ? -bell(nx, .5, .24) * upperChestBand * formStrength * .28 : 0;
+        const meshChestCenterGroove = isMeshRemake && view === "front" ? -bell(nx, .5, .026) * chestBand * formStrength * .68 : 0;
+        const meshUnderBreastGroove = isMeshRemake && view === "front" ? -pairedLobes * breastLowerBand * formStrength * .42 : 0;
+        const meshBackButtVolume = isMeshRemake && view === "back" ? pairedLobes * hipBand * formStrength * .96 : 0;
+        const meshButtCenterGroove = isMeshRemake && view === "back" ? -bell(nx, .5, .026) * hipBand * formStrength * .92 : 0;
+        const meshUnderButtGroove = isMeshRemake && view === "back" ? -pairedLobes * buttLowerBand * formStrength * .42 : 0;
+        const meshPelvisCenterCut = isMeshRemake && (view === "front" || view === "back") ? -bell(nx, .5, .038) * bell(ny, .66, .09) * formStrength * .64 : 0;
+        const meshSideChestVolume = isMeshRemake && view === "side" ? bell(nx, .205, .085) * chestBand * formStrength * .58 : 0;
+        const meshSideButtVolume = isMeshRemake && view === "side" ? bell(nx, .82, .10) * hipBand * formStrength * .86 : 0;
         const frontChestVolume = view === "front" ? pairedLobes * chestBand * formStrength * (isMeshRemake ? .18 : .48) : 0;
         const frontRibVolume = view === "front" ? bell(nx, .5, .20) * torsoBand * formStrength * .022 : 0;
         const backShoulderVolume = view === "back" ? bell(nx, .5, .30) * shoulderBand * formStrength * .09 : 0;
@@ -5420,7 +5423,8 @@
         const halfShoulderBand = bell(halfT, .72, .34);
         const halfCutValley = halfMode === "full" ? 0 : -halfCutBand * Math.max(backBand, .28) * halfDepthStrength * (scaffoldFace ? .35 : 1);
         const halfOuterRise = halfMode === "full" ? 0 : halfShoulderBand * halfDepthStrength * .12;
-        const softScaffoldForm = absoluteVolume + darkGrooveBoost + frontChestVolume + frontRibVolume + backShoulderVolume + backHipVolume + meshFrontChestVolume + meshUpperChestFlatten + meshChestCenterGroove + meshUnderBreastGroove + meshBackButtVolume + meshButtCenterGroove + meshUnderButtGroove + meshPelvisCenterCut + meshSideChestVolume + meshSideButtVolume + halfCutValley + halfOuterRise;
+        const sourceAlignedDetail = sourceToneDetail + sourceEdgeDetail;
+        const softScaffoldForm = absoluteVolume + darkGrooveBoost + frontChestVolume + frontRibVolume + backShoulderVolume + backHipVolume + meshFrontChestVolume + meshUpperChestFlatten + meshChestCenterGroove + meshUnderBreastGroove + meshBackButtVolume + meshButtCenterGroove + meshUnderButtGroove + meshPelvisCenterCut + meshSideChestVolume + meshSideButtVolume + halfCutValley + halfOuterRise + sourceAlignedDetail;
         return clampDetail(softScaffoldForm * scaffoldDetailScale + centerGroove);
       };
       const displacePoint = (p, direction, amount) => [
@@ -5582,7 +5586,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: isMeshRemake ? "sourceLikeLowerDetailScaleMeshV30" : "viewSheetHeightmapArmTubeSeparationV20", buildMode: isMeshRemake ? "meshRebuild" : "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, sourceLikeMeshScale, guidedFormVolumes: !isMeshRemake, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: !isMeshRemake, wideBodyScaffold: !isMeshRemake, preservedArmSpanGuides: !isMeshRemake, filledScaffoldFaces: !isMeshRemake, strongerArmGuides: !isMeshRemake, closedInternalSkin: !isMeshRemake, calmerScaffoldCarving: !isMeshRemake, armTubeSeparation: !isMeshRemake, controlledLegGap: !isMeshRemake, trimmedHipRuns: !isMeshRemake, sourceLikeSheetMesh: isMeshRemake, splitArmMeshRemake: isMeshRemake, sourceLikeLowerDetailScaleMesh: isMeshRemake, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: isMeshRemake ? "sourceLikeImageAlignedMeshV31" : "viewSheetHeightmapArmTubeSeparationV20", buildMode: isMeshRemake ? "meshRebuild" : "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, sourceLikeMeshScale, guidedFormVolumes: !isMeshRemake, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: !isMeshRemake, wideBodyScaffold: !isMeshRemake, preservedArmSpanGuides: !isMeshRemake, filledScaffoldFaces: !isMeshRemake, strongerArmGuides: !isMeshRemake, closedInternalSkin: !isMeshRemake, calmerScaffoldCarving: !isMeshRemake, armTubeSeparation: !isMeshRemake, controlledLegGap: !isMeshRemake, trimmedHipRuns: !isMeshRemake, sourceLikeSheetMesh: isMeshRemake, splitArmMeshRemake: isMeshRemake, sourceLikeLowerDetailScaleMesh: isMeshRemake, sourceLikeImageAlignedMesh: isMeshRemake, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
