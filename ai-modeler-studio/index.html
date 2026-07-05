@@ -1362,7 +1362,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: smoother source-like sheet mesh remake. Version: source_like_sheet_mesh_v25. BoltWorks3D build: t_pose_source_like_sheet_mesh_v25.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: source-like sheet mesh with split arms. Version: source_like_split_arm_mesh_v26. BoltWorks3D build: t_pose_source_like_split_arm_mesh_v26.
       </div>
     </footer>
   </main>
@@ -4852,10 +4852,10 @@
       });
       const splitTPoseArmRuns = (runs, y) => {
         const ny = y / Math.max(1, gridY - 1);
-        if (ny < .285 || ny > .615) return runs;
+        if (ny < .18 || ny > .39) return runs;
         const split = [];
-        const leftGap = Math.round(gridX * (ny < .34 ? .288 : .322));
-        const rightGap = Math.round(gridX * (ny < .34 ? .712 : .678));
+        const leftGap = Math.round(gridX * (ny < .28 ? .34 : .365));
+        const rightGap = Math.round(gridX * (ny < .28 ? .66 : .635));
         const centerMin = Math.round(gridX * .38);
         const centerMax = Math.round(gridX * .62);
         for (const run of runs) {
@@ -5010,7 +5010,8 @@
           return (bw + bc * 5) - (aw + ac * 5);
         })[0] || null;
         sideProfiles[y] = bodySide;
-        bodyRuns[y] = useSideBodyScaffold ? sideSilhouetteBodyRuns(y, bodySide) : rowRuns(unionMask, gridX, 0);
+        const rawRuns = rowRuns(unionMask, gridX, 0);
+        bodyRuns[y] = useSideBodyScaffold ? sideSilhouetteBodyRuns(y, bodySide) : (isMeshRemake ? splitTPoseArmRuns(rawRuns, y) : rawRuns);
       }
       let voxelCount = 0;
       for (let y = 0; y < gridY; y++) {
@@ -5022,7 +5023,10 @@
           const xCenter = x + .5;
           const xRound = Math.abs(xCenter - run.center) / Math.max(.5, run.radius);
           if (xRound > 1.08) continue;
-          const zAllowance = Math.sqrt(Math.max(0, 1 - xRound * xRound)) * 1.08;
+          const isArmRun = isMeshRemake && /Arm$/.test(run.role || "");
+          const zAllowance = isArmRun
+            ? Math.min(.36, Math.sqrt(Math.max(0, 1 - xRound * xRound)) * .46)
+            : Math.sqrt(Math.max(0, 1 - xRound * xRound)) * 1.08;
           for (let z = 0; z < gridZ; z++) {
             if (!sideMask[y * gridZ + z]) continue;
             const zCenter = z + .5;
@@ -5519,7 +5523,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: isMeshRemake ? "sourceLikeSheetMeshV25" : "viewSheetHeightmapArmTubeSeparationV20", buildMode: isMeshRemake ? "meshRebuild" : "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: !isMeshRemake, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: !isMeshRemake, wideBodyScaffold: !isMeshRemake, preservedArmSpanGuides: !isMeshRemake, filledScaffoldFaces: !isMeshRemake, strongerArmGuides: !isMeshRemake, closedInternalSkin: !isMeshRemake, calmerScaffoldCarving: !isMeshRemake, armTubeSeparation: !isMeshRemake, controlledLegGap: !isMeshRemake, trimmedHipRuns: !isMeshRemake, sourceLikeSheetMesh: isMeshRemake, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: isMeshRemake ? "sourceLikeSplitArmMeshV26" : "viewSheetHeightmapArmTubeSeparationV20", buildMode: isMeshRemake ? "meshRebuild" : "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: !isMeshRemake, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: !isMeshRemake, wideBodyScaffold: !isMeshRemake, preservedArmSpanGuides: !isMeshRemake, filledScaffoldFaces: !isMeshRemake, strongerArmGuides: !isMeshRemake, closedInternalSkin: !isMeshRemake, calmerScaffoldCarving: !isMeshRemake, armTubeSeparation: !isMeshRemake, controlledLegGap: !isMeshRemake, trimmedHipRuns: !isMeshRemake, sourceLikeSheetMesh: isMeshRemake, splitArmMeshRemake: isMeshRemake, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
