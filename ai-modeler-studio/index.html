@@ -1361,7 +1361,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: arm-band stretch with controlled leg gap. Version: gen_heightmap_arm_leg_balance_v19. BoltWorks3D build: t_pose_gen_arm_leg_balance_v19.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: separated arm tubes with balanced leg gap. Version: gen_heightmap_arm_tube_separation_v20. BoltWorks3D build: t_pose_gen_arm_tube_separation_v20.
       </div>
     </footer>
   </main>
@@ -4203,7 +4203,7 @@
       const gridY = Math.max(16, Math.min(128, Math.round(rows)));
       const gridZ = Math.max(10, Math.min(44, Math.round(gridX * .55)));
       const meshH = scale;
-      const meshW = scale * .72;
+      const meshW = scale * .82;
       const meshD = Math.max(back, depth, .25) * 2.15;
       const frontMask = new Array(gridX * gridY).fill(false);
       const backMask = new Array(gridX * gridY).fill(false);
@@ -4660,7 +4660,7 @@
         const yMin = Math.max(1, Math.floor(gridY * .225));
         const yMax = Math.min(gridY - 2, Math.ceil(gridY * .42));
         const gapCenters = [.35, .65];
-        const gapHalfWidth = detailedHalfSheet ? .014 : .02;
+        const gapHalfWidth = detailedHalfSheet ? .018 : .02;
         for (let y = yMin; y <= yMax; y++) {
           const ny = (y + .5) / gridY;
           const upperArmBand = softBell(ny, .255, .06);
@@ -4741,23 +4741,17 @@
       addTPoseArmTubes();
       fillShortInternalGaps(detailedHalfSheet ? 3 : 1);
       closeSkinGaps(detailedHalfSheet ? 4 : 1);
-      if (!useSideBodyScaffold) carveArmBodySeparation();
+      carveArmBodySeparation();
       carveFormGroove(.5, .305, .105, .03, .064, .096);
       carveFormGroove(.5, .54, .93, .04, .108, .124);
 
       const positions = [];
       const uvs = [];
-      const point = (x, y, z) => {
-        const ny = y / Math.max(1, gridY);
-        const armBand = Math.exp(-Math.pow((ny - .238) / .046, 2));
-        const shoulderBlend = Math.exp(-Math.pow((ny - .28) / .075, 2)) * .28;
-        const armSpanScale = 1 + armBand * .72 + shoulderBlend;
-        return [
-          (x / gridX - .5) * meshW * armSpanScale,
-          (.5 - ny) * meshH,
-          (z / gridZ - .5) * meshD
-        ];
-      };
+      const point = (x, y, z) => [
+        (x / gridX - .5) * meshW,
+        (.5 - y / gridY) * meshH,
+        (z / gridZ - .5) * meshD
+      ];
       const pushTri = (a, b, c) => {
         positions.push(...a.p, ...b.p, ...c.p);
         uvs.push(...a.uv, ...b.uv, ...c.uv);
@@ -4991,7 +4985,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetHeightmapArmLegBalanceV19", buildMode: "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: true, wideBodyScaffold: true, preservedArmSpanGuides: true, filledScaffoldFaces: true, strongerArmGuides: true, closedInternalSkin: true, calmerScaffoldCarving: true, armBandStretch: true, controlledLegGap: true, trimmedHipRuns: true, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: "viewSheetHeightmapArmTubeSeparationV20", buildMode: "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: true, wideBodyScaffold: true, preservedArmSpanGuides: true, filledScaffoldFaces: true, strongerArmGuides: true, closedInternalSkin: true, calmerScaffoldCarving: true, armTubeSeparation: true, controlledLegGap: true, trimmedHipRuns: true, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
