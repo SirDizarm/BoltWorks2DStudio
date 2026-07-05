@@ -1331,6 +1331,7 @@
             <select id="reliefBuildModeInput">
               <option value="heightmap">Gen from heightmap</option>
               <option value="smooth">Build from heightmap</option>
+              <option value="anatomy">Rebuild mannequin from sheet</option>
             </select>
           </label>
           <label style="flex:1">Body preset
@@ -1361,7 +1362,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: separated arm tubes with balanced leg gap. Version: gen_heightmap_arm_tube_separation_v20. BoltWorks3D build: t_pose_gen_arm_tube_separation_v20.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: new mannequin sheet rebuild mode. Version: mannequin_sheet_rebuild_v21. BoltWorks3D build: t_pose_mannequin_sheet_rebuild_v21.
       </div>
     </footer>
   </main>
@@ -4193,8 +4194,166 @@
       };
     }
 
+    function createMannequinSheetRebuildGeometry({ scale, depth, back, threshold, darkForeground, imageData, viewRects, bodyPreset = "auto", sourceName = "" }) {
+      const positions = [];
+      const uvs = [];
+      const meshH = scale;
+      const meshW = scale * .82;
+      const meshD = Math.max(back, depth, .25) * 2.35;
+      const sx = meshW / 5.25;
+      const sy = meshH / 6.2;
+      const sz = meshD / 1.9;
+      const p = (x, y, z) => [x * sx, y * sy, z * sz];
+      const pushTri = (a, b, c) => {
+        positions.push(...a.p, ...b.p, ...c.p);
+        uvs.push(...a.uv, ...b.uv, ...c.uv);
+      };
+      const pushQuad = (a, b, c, d) => {
+        pushTri(a, b, c);
+        pushTri(a, c, d);
+      };
+      const nameHint = String(sourceName || "").toLowerCase();
+      const resolvedPreset = bodyPreset === "auto"
+        ? (/female|woman|girl|boob|breast|bust|curvy/.test(nameHint) ? "female" : (/male|man|boy|muscle|pec|bodybuilder/.test(nameHint) ? "male" : "female"))
+        : bodyPreset;
+      const isFemale = resolvedPreset === "female";
+      const isMale = resolvedPreset === "male";
+      const viewRatio = rect => rect && rect.h ? rect.w / rect.h : .32;
+      const sideRatio = Math.max(.12, Math.min(.34, viewRatio(viewRects?.[1])));
+      const depthScale = Math.max(.82, Math.min(1.18, sideRatio / .22));
+      let primitiveParts = 0;
+      const ellipsoidPoint = (cx, cy, cz, rx, ry, rz, theta, phi) => ({
+        p: p(
+          cx + Math.cos(theta) * Math.sin(phi) * rx,
+          cy + Math.cos(phi) * ry,
+          cz + Math.sin(theta) * Math.sin(phi) * rz
+        ),
+        uv: [theta / (Math.PI * 2), 1 - phi / Math.PI]
+      });
+      const addEllipsoid = (cx, cy, cz, rx, ry, rz, rings = 16, segments = 24) => {
+        primitiveParts++;
+        for (let r = 0; r < rings; r++) {
+          const phi0 = (r / rings) * Math.PI;
+          const phi1 = ((r + 1) / rings) * Math.PI;
+          for (let s = 0; s < segments; s++) {
+            const theta0 = (s / segments) * Math.PI * 2;
+            const theta1 = ((s + 1) / segments) * Math.PI * 2;
+            pushQuad(
+              ellipsoidPoint(cx, cy, cz, rx, ry, rz, theta0, phi0),
+              ellipsoidPoint(cx, cy, cz, rx, ry, rz, theta1, phi0),
+              ellipsoidPoint(cx, cy, cz, rx, ry, rz, theta1, phi1),
+              ellipsoidPoint(cx, cy, cz, rx, ry, rz, theta0, phi1)
+            );
+          }
+        }
+      };
+      const capsuleRadius = t => {
+        const a = Math.abs(t);
+        if (a <= .72) return 1;
+        const k = (1 - a) / .28;
+        return Math.max(.08, Math.sin(Math.max(0, Math.min(1, k)) * Math.PI * .5));
+      };
+      const addCapsuleX = (cx, cy, cz, halfLength, ry, rz, rings = 18, segments = 18) => {
+        primitiveParts++;
+        for (let i = 0; i < rings; i++) {
+          const t0 = -1 + (i / rings) * 2;
+          const t1 = -1 + ((i + 1) / rings) * 2;
+          for (let s = 0; s < segments; s++) {
+            const a0 = (s / segments) * Math.PI * 2;
+            const a1 = ((s + 1) / segments) * Math.PI * 2;
+            const v = (t, a) => {
+              const r = capsuleRadius(t);
+              return { p: p(cx + t * halfLength, cy + Math.cos(a) * ry * r, cz + Math.sin(a) * rz * r), uv: [(t + 1) * .5, a / (Math.PI * 2)] };
+            };
+            pushQuad(v(t0, a0), v(t1, a0), v(t1, a1), v(t0, a1));
+          }
+        }
+      };
+      const addCapsuleY = (cx, cy, cz, halfLength, rx, rz, rings = 18, segments = 18) => {
+        primitiveParts++;
+        for (let i = 0; i < rings; i++) {
+          const t0 = -1 + (i / rings) * 2;
+          const t1 = -1 + ((i + 1) / rings) * 2;
+          for (let s = 0; s < segments; s++) {
+            const a0 = (s / segments) * Math.PI * 2;
+            const a1 = ((s + 1) / segments) * Math.PI * 2;
+            const v = (t, a) => {
+              const r = capsuleRadius(t);
+              return { p: p(cx + Math.cos(a) * rx * r, cy + t * halfLength, cz + Math.sin(a) * rz * r), uv: [a / (Math.PI * 2), (t + 1) * .5] };
+            };
+            pushQuad(v(t0, a0), v(t1, a0), v(t1, a1), v(t0, a1));
+          }
+        }
+      };
+      const addFingerSet = side => {
+        const palmX = side * 2.34;
+        addEllipsoid(palmX, 1.12, .02, .17, .085, .065, 10, 14);
+        [-2, -1, 0, 1, 2].forEach(i => {
+          const length = Math.abs(i) === 2 ? .2 : .27;
+          const fy = 1.12 + i * .045;
+          const fz = .04 + i * .018;
+          addCapsuleX(palmX + side * (.12 + length * .48), fy, fz, length * .5, .017, .013, 6, 8);
+          addEllipsoid(palmX + side * (.12 + length), fy, fz, .022, .016, .013, 5, 8);
+        });
+        addCapsuleX(palmX + side * .03, 1.02, .09, .16, .022, .017, 6, 8);
+      };
+      const addFoot = side => {
+        addEllipsoid(side * .17, -3.02, .2, .18, .075, .31, 8, 14);
+        [-.06, 0, .06].forEach(offset => addEllipsoid(side * (.17 + offset), -3.04, .47, .04, .022, .055, 5, 8));
+      };
+      const chestWidth = isMale ? .72 : .6;
+      const waistWidth = isMale ? .43 : .36;
+      const hipWidth = isFemale ? .66 : .56;
+      const chestDepth = (isMale ? .37 : .34) * depthScale;
+      const hipDepth = (isFemale ? .44 : .38) * depthScale;
+      addEllipsoid(0, 2.42, 0, .3, .41, .26 * depthScale, 18, 28);
+      addEllipsoid(-.28, 2.39, .01, .045, .12, .035, 8, 10);
+      addEllipsoid(.28, 2.39, .01, .045, .12, .035, 8, 10);
+      addCapsuleY(0, 1.87, 0, .22, .14, .13 * depthScale, 10, 16);
+      addEllipsoid(0, 1.08, .02, chestWidth, .78, chestDepth, 18, 28);
+      addEllipsoid(0, .23, -.02, waistWidth, .48, .25 * depthScale, 14, 24);
+      addEllipsoid(0, -.62, -.03, hipWidth, isFemale ? .55 : .5, hipDepth, 16, 28);
+      addEllipsoid(-.48, 1.27, .02, .19, .17, .16 * depthScale, 12, 16);
+      addEllipsoid(.48, 1.27, .02, .19, .17, .16 * depthScale, 12, 16);
+      addCapsuleX(-1.02, 1.23, 0, .54, isMale ? .145 : .125, (isMale ? .13 : .115) * depthScale, 14, 16);
+      addCapsuleX(-1.72, 1.17, 0, .62, isMale ? .115 : .1, (isMale ? .105 : .092) * depthScale, 14, 16);
+      addFingerSet(-1);
+      addCapsuleX(1.02, 1.23, 0, .54, isMale ? .145 : .125, (isMale ? .13 : .115) * depthScale, 14, 16);
+      addCapsuleX(1.72, 1.17, 0, .62, isMale ? .115 : .1, (isMale ? .105 : .092) * depthScale, 14, 16);
+      addFingerSet(1);
+      addCapsuleY(-.22, -1.45, 0, .78, isFemale ? .18 : .16, (isFemale ? .165 : .15) * depthScale, 18, 16);
+      addCapsuleY(.22, -1.45, 0, .78, isFemale ? .18 : .16, (isFemale ? .165 : .15) * depthScale, 18, 16);
+      addCapsuleY(-.18, -2.36, .02, .62, .115, .105 * depthScale, 14, 14);
+      addCapsuleY(.18, -2.36, .02, .62, .115, .105 * depthScale, 14, 14);
+      addFoot(-1);
+      addFoot(1);
+      if (isFemale) {
+        addEllipsoid(-.23, 1.03, .29, .19, .21, .145 * depthScale, 14, 18);
+        addEllipsoid(.23, 1.03, .29, .19, .21, .145 * depthScale, 14, 18);
+        addEllipsoid(-.25, -.7, -.34, .25, .22, .19 * depthScale, 12, 16);
+        addEllipsoid(.25, -.7, -.34, .25, .22, .19 * depthScale, 12, 16);
+      } else {
+        addEllipsoid(-.23, 1.1, .27, .23, .14, .075 * depthScale, 10, 14);
+        addEllipsoid(.23, 1.1, .27, .23, .14, .075 * depthScale, 10, 14);
+      }
+      if (isMale) {
+        addEllipsoid(-.7, 1.25, .08, .16, .1, .105 * depthScale, 10, 14);
+        addEllipsoid(.7, 1.25, .08, .16, .1, .105 * depthScale, 10, 14);
+        addEllipsoid(-.28, -1.0, .18, .14, .24, .08 * depthScale, 10, 14);
+        addEllipsoid(.28, -1.0, .18, .14, .24, .08 * depthScale, 10, 14);
+      }
+      return {
+        positions,
+        uvs,
+        meta: { mode: "mannequinSheetRebuildV21", buildMode: "anatomy", bodyPreset, resolvedPreset, sourceName, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, depth, back, viewRects, sideRatio, depthScale, primitiveParts, partBasedExporter: true }
+      };
+    }
+
     function createReliefGeometryFromViewSheet({ imageData, cols, rows, scale, depth, back, threshold, smoothPasses, darkForeground, buildMode = "heightmap", bodyPreset = "auto", sourceName = "" }) {
       const viewRects = detectReliefViewRects(imageData, threshold, darkForeground);
+      if (buildMode === "anatomy") {
+        return createMannequinSheetRebuildGeometry({ imageData, viewRects, scale, depth, back, threshold, darkForeground, bodyPreset, sourceName });
+      }
       if (buildMode === "smooth") {
         return createSmoothMannequinSheetGeometry({ imageData, viewRects, scale, depth, back, threshold, smoothPasses, darkForeground, bodyPreset, sourceName });
       }
