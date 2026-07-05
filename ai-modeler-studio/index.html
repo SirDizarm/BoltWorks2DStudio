@@ -1361,7 +1361,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: pre-arm heightmap body restored. Version: gen_heightmap_body_restore_v10. BoltWorks3D build: t_pose_gen_heightmap_restore_v10.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: mirrored half-body heightmap with arm guides. Version: gen_heightmap_mirror_arms_v11. BoltWorks3D build: t_pose_gen_mirror_arms_v11.
       </div>
     </footer>
   </main>
@@ -4292,6 +4292,27 @@
         return runs;
       };
       const findRun = (runs, x) => runs.find(run => x >= run.start && x <= run.end) || null;
+      const mergeRuns = runs => {
+        if (!runs.length) return runs;
+        const sorted = runs.slice().sort((a, b) => a.start - b.start);
+        const merged = [];
+        for (const run of sorted) {
+          const last = merged[merged.length - 1];
+          if (!last || run.start > last.end + 1) {
+            merged.push({ ...run });
+          } else {
+            last.end = Math.max(last.end, run.end);
+            last.center = (last.start + last.end + 1) * .5;
+            last.radius = Math.max(.5, (last.end - last.start + 1) * .5);
+          }
+        }
+        return merged;
+      };
+      const mirrorRun = run => {
+        const start = gridX - 1 - run.end;
+        const end = gridX - 1 - run.start;
+        return { start, end, center: (start + end + 1) * .5, radius: Math.max(.5, (end - start + 1) * .5), role: run.role };
+      };
       const makeRun = (start, end, role = "body") => ({
         start,
         end,
@@ -4322,6 +4343,28 @@
           if (run.end - rightStart >= 2) split.push(makeRun(rightStart, run.end, "rightArm"));
         }
         return split.length ? split : runs;
+      };
+      const mirrorDominantHalfBodyRuns = (runs, y) => {
+        if (!(frontHalfMode !== "full" || backHalfMode !== "full") || !runs.length) return runs;
+        const ny = y / Math.max(1, gridY - 1);
+        if (ny < .06 || ny > .95) return runs;
+        const center = gridX * .5;
+        const bodyLike = runs.filter(run => {
+          const width = run.end - run.start + 1;
+          const touchesEdge = run.start <= 1 || run.end >= gridX - 2;
+          return width >= 2 && !touchesEdge;
+        });
+        const candidates = bodyLike.length ? bodyLike : runs;
+        const best = candidates.slice().sort((a, b) => {
+          const aw = a.end - a.start + 1;
+          const bw = b.end - b.start + 1;
+          const ac = 1 / (1 + Math.abs(a.center - center));
+          const bc = 1 / (1 + Math.abs(b.center - center));
+          return (bw + bc * 6) - (aw + ac * 6);
+        })[0];
+        if (!best) return runs;
+        if (best.start < center && best.end > center && best.end - best.start > gridX * .22) return runs;
+        return mergeRuns([best, mirrorRun(best)]);
       };
       const centeredMannequinBodyRuns = y => {
         const ny = y / Math.max(1, gridY - 1);
@@ -4378,7 +4421,7 @@
         for (let x = 0; x < gridX; x++) unionRow[x] = frontMask[y * gridX + x] || backMask[y * gridX + x];
         const unionMask = new Array(gridX).fill(false);
         for (let x = 0; x < gridX; x++) unionMask[x] = unionRow[x];
-        bodyRuns[y] = rowRuns(unionMask, gridX, 0);
+        bodyRuns[y] = mirrorDominantHalfBodyRuns(rowRuns(unionMask, gridX, 0), y);
         const sideRuns = rowRuns(sideMask, gridZ, y);
         const largestSide = sideRuns.sort((a, b) => (b.end - b.start) - (a.end - a.start))[0] || null;
         sideProfiles[y] = largestSide;
@@ -4421,26 +4464,41 @@
         }
       };
       const addTPoseArmTubes = () => {
-        const armY = gridY * .305;
-        const shoulderY = gridY * .285;
-        const armRadiusY = Math.max(1.55, gridY * .023);
-        const shoulderRadiusY = Math.max(2.2, gridY * .031);
-        const armRadiusZ = Math.max(2.25, gridZ * .105);
+        const armY = gridY * .302;
+        const shoulderY = gridY * .292;
         const zCenter = gridZ * .5;
-        const leftMin = Math.max(1, Math.floor(gridX * .015));
-        const leftMax = Math.min(gridX - 2, Math.ceil(gridX * .405));
-        const rightMin = Math.max(1, Math.floor(gridX * .595));
-        const rightMax = Math.min(gridX - 2, Math.ceil(gridX * .985));
-        const addArmSide = (minX, maxX, sideSign) => {
+        const addVoxelEllipsoid = (cx, cy, cz, rx, ry, rz) => {
+          const minX = Math.max(1, Math.floor(cx - rx * 1.08));
+          const maxX = Math.min(gridX - 2, Math.ceil(cx + rx * 1.08));
+          const minY = Math.max(1, Math.floor(cy - ry * 1.08));
+          const maxY = Math.min(gridY - 2, Math.ceil(cy + ry * 1.08));
+          const minZ = Math.max(1, Math.floor(cz - rz * 1.08));
+          const maxZ = Math.min(gridZ - 2, Math.ceil(cz + rz * 1.08));
+          for (let y = minY; y <= maxY; y++) {
+            const yPart = Math.pow((y + .5 - cy) / Math.max(.5, ry), 2);
+            for (let x = minX; x <= maxX; x++) {
+              const xPart = Math.pow((x + .5 - cx) / Math.max(.5, rx), 2);
+              for (let z = minZ; z <= maxZ; z++) {
+                const zPart = Math.pow((z + .5 - cz) / Math.max(.5, rz), 2);
+                if (xPart + yPart + zPart <= 1) addVoxel(x, y, z);
+              }
+            }
+          }
+        };
+        const armRadiusY = Math.max(1.2, gridY * .018);
+        const armRadiusZ = Math.max(1.45, gridZ * .07);
+        const addArmSide = (shoulderX, wristX, sideSign) => {
+          const minX = Math.max(1, Math.min(shoulderX, wristX));
+          const maxX = Math.min(gridX - 2, Math.max(shoulderX, wristX));
           for (let x = minX; x <= maxX; x++) {
-            const nx = (x + .5) / gridX;
-            const t = sideSign < 0
-              ? (nx - .015) / Math.max(.001, .405 - .015)
-              : (.985 - nx) / Math.max(.001, .985 - .595);
-            const shoulderBlend = Math.max(0, Math.min(1, t));
-            const yCenter = armY - shoulderBlend * gridY * .018;
-            const radiusY = armRadiusY + shoulderBlend * (shoulderRadiusY - armRadiusY);
-            const radiusZ = armRadiusZ * (.82 + shoulderBlend * .24);
+            const t = Math.max(0, Math.min(1, sideSign < 0
+              ? (shoulderX - x) / Math.max(1, shoulderX - wristX)
+              : (x - shoulderX) / Math.max(1, wristX - shoulderX)));
+            const shoulderBlend = 1 - t;
+            const wristBlend = t;
+            const yCenter = armY - shoulderBlend * gridY * .012 + wristBlend * gridY * .006;
+            const radiusY = armRadiusY * (.62 + shoulderBlend * .58 + (t > .78 ? .22 : 0));
+            const radiusZ = armRadiusZ * (.62 + shoulderBlend * .5 + (t > .78 ? .18 : 0));
             const yStart = Math.max(1, Math.floor(yCenter - radiusY * 1.25));
             const yEnd = Math.min(gridY - 2, Math.ceil(yCenter + radiusY * 1.25));
             const zStart = Math.max(1, Math.floor(zCenter - radiusZ * 1.25));
@@ -4453,19 +4511,27 @@
               }
             }
           }
+          addVoxelEllipsoid(wristX, armY + gridY * .01, zCenter, gridX * .018, gridY * .026, gridZ * .06);
+          const fingerStart = wristX + sideSign * Math.max(1, gridX * .012);
+          for (let i = -2; i <= 2; i++) {
+            const fingerY = armY + i * gridY * .006;
+            addVoxelEllipsoid(fingerStart + sideSign * gridX * .012, fingerY, zCenter + i * gridZ * .012, gridX * .014, gridY * .006, gridZ * .018);
+          }
         };
-        addArmSide(leftMin, leftMax, -1);
-        addArmSide(rightMin, rightMax, 1);
-        for (let x = Math.floor(gridX * .36); x <= Math.ceil(gridX * .64); x++) {
+        addArmSide(Math.floor(gridX * .41), Math.floor(gridX * .08), -1);
+        addArmSide(Math.ceil(gridX * .59), Math.ceil(gridX * .92), 1);
+        const shoulderRadiusY = Math.max(1.8, gridY * .027);
+        const shoulderRadiusZ = Math.max(1.9, gridZ * .085);
+        for (let x = Math.floor(gridX * .37); x <= Math.ceil(gridX * .63); x++) {
           for (let y = Math.floor(shoulderY - shoulderRadiusY); y <= Math.ceil(shoulderY + shoulderRadiusY); y++) {
-            for (let z = Math.floor(zCenter - armRadiusZ); z <= Math.ceil(zCenter + armRadiusZ); z++) {
+            for (let z = Math.floor(zCenter - shoulderRadiusZ); z <= Math.ceil(zCenter + shoulderRadiusZ); z++) {
               const nx = (x + .5) / gridX;
               const shoulderLobe = Math.max(
-                Math.exp(-Math.pow((nx - .405) / .075, 2)),
-                Math.exp(-Math.pow((nx - .595) / .075, 2))
+                Math.exp(-Math.pow((nx - .41) / .062, 2)),
+                Math.exp(-Math.pow((nx - .59) / .062, 2))
               );
               const yPart = Math.pow((y + .5 - shoulderY) / Math.max(.5, shoulderRadiusY), 2);
-              const zPart = Math.pow((z + .5 - zCenter) / Math.max(.5, armRadiusZ), 2);
+              const zPart = Math.pow((z + .5 - zCenter) / Math.max(.5, shoulderRadiusZ), 2);
               if (shoulderLobe > .2 && yPart + zPart <= 1.15) addVoxel(x, y, z);
             }
           }
@@ -4616,7 +4682,9 @@
           for (const [x, y, z] of candidates) addVoxel(x, y, z);
         }
       };
+      addTPoseArmTubes();
       closeSkinGaps(detailedHalfSheet ? 2 : 1);
+      carveArmBodySeparation();
       carveFormGroove(.5, .305, .105, .03, .064, .096);
       carveFormGroove(.5, .54, .93, .04, .108, .124);
 
@@ -4856,7 +4924,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetHeightmapBodyRestoreV10", buildMode: "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: "viewSheetHeightmapMirrorArmsV11", buildMode: "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, mirroredHalfBodyRuns: true, armGuideTubes: true, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
