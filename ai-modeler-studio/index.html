@@ -1362,7 +1362,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: sheet voxel mesh remake route. Version: sheet_voxel_mesh_remake_v24. BoltWorks3D build: t_pose_sheet_voxel_mesh_remake_v24.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: smoother source-like sheet mesh remake. Version: source_like_sheet_mesh_v25. BoltWorks3D build: t_pose_source_like_sheet_mesh_v25.
       </div>
     </footer>
   </main>
@@ -4721,6 +4721,7 @@
 
     function createReliefGeometryFromViewSheet({ imageData, cols, rows, scale, depth, back, threshold, smoothPasses, darkForeground, buildMode = "heightmap", bodyPreset = "auto", sourceName = "" }) {
       const viewRects = detectReliefViewRects(imageData, threshold, darkForeground);
+      const isMeshRemake = buildMode === "meshRebuild";
       if (buildMode === "anatomy") {
         return createMannequinSheetRebuildGeometry({ imageData, viewRects, scale, depth, back, threshold, darkForeground, bodyPreset, sourceName });
       }
@@ -4994,7 +4995,7 @@
       };
       const sideProfiles = [];
       const bodyRuns = [];
-      const useSideBodyScaffold = frontHalfMode !== "full" || backHalfMode !== "full";
+      const useSideBodyScaffold = !isMeshRemake && (frontHalfMode !== "full" || backHalfMode !== "full");
       for (let y = 0; y < gridY; y++) {
         const unionRow = new Array(gridX).fill(false);
         for (let x = 0; x < gridX; x++) unionRow[x] = frontMask[y * gridX + x] || backMask[y * gridX + x];
@@ -5168,16 +5169,18 @@
       };
       // Detailed half-sheet form zones. Let the side silhouette drive most of the body depth,
       // then add compact paired volumes only where a flat silhouette cannot express rounded form.
-      const detailedHalfSheet = frontHalfMode !== "full" || backHalfMode !== "full";
+      const detailedHalfSheet = !isMeshRemake && (frontHalfMode !== "full" || backHalfMode !== "full");
       const pairedGuideScale = detailedHalfSheet ? .74 : 1;
       const slabGuideScale = detailedHalfSheet ? .08 : .32;
       // Keep front chest helpers as compact forward volumes. Do not add paired rear hip
       // ellipsoids as solid voxels: those blobs change the front silhouette too. The
       // backside is now shaped by side/back depth displacement instead.
-      addFormEllipsoid(.38, .305, .155, .068, .044, .096, pairedGuideScale);
-      addFormEllipsoid(.62, .305, .155, .068, .044, .096, pairedGuideScale);
-      addFormEllipsoid(.5, .382, .35, .122, .052, .034, slabGuideScale);
-      addFormEllipsoid(.5, .405, .66, .122, .052, .034, slabGuideScale);
+      if (!isMeshRemake) {
+        addFormEllipsoid(.38, .305, .155, .068, .044, .096, pairedGuideScale);
+        addFormEllipsoid(.62, .305, .155, .068, .044, .096, pairedGuideScale);
+        addFormEllipsoid(.5, .382, .35, .122, .052, .034, slabGuideScale);
+        addFormEllipsoid(.5, .405, .66, .122, .052, .034, slabGuideScale);
+      }
 
       // Compact side fill: connect short internal gaps across depth/width so thin limbs
       // and torso slices become solid instead of see-through, without growing the outer silhouette.
@@ -5267,12 +5270,14 @@
           for (const [x, y, z] of candidates) addVoxel(x, y, z);
         }
       };
-      addTPoseArmTubes();
-      fillShortInternalGaps(detailedHalfSheet ? 3 : 1);
-      closeSkinGaps(detailedHalfSheet ? 4 : 1);
-      carveArmBodySeparation();
-      carveFormGroove(.5, .305, .105, .03, .064, .096);
-      carveFormGroove(.5, .54, .93, .04, .108, .124);
+      if (!isMeshRemake) addTPoseArmTubes();
+      fillShortInternalGaps(isMeshRemake ? 1 : (detailedHalfSheet ? 3 : 1));
+      closeSkinGaps(isMeshRemake ? 1 : (detailedHalfSheet ? 4 : 1));
+      if (!isMeshRemake) {
+        carveArmBodySeparation();
+        carveFormGroove(.5, .305, .105, .03, .064, .096);
+        carveFormGroove(.5, .54, .93, .04, .108, .124);
+      }
 
       const positions = [];
       const uvs = [];
@@ -5289,8 +5294,8 @@
         pushTri(a, b, c);
         pushTri(a, c, d);
       };
-      const detailStrength = Math.min(.035, Math.max(.01, depth * .018));
-      const formStrength = Math.min(.18, Math.max(.055, depth * .135));
+      const detailStrength = isMeshRemake ? 0 : Math.min(.035, Math.max(.01, depth * .018));
+      const formStrength = isMeshRemake ? 0 : Math.min(.18, Math.max(.055, depth * .135));
       const detailContrastStrength = 0;
       const centerGrooveStrength = formStrength * .7;
       const halfDepthStrength = formStrength * .18;
@@ -5369,7 +5374,7 @@
         if (view !== "none") return detailVertex(x, y, z, u, vv, view, direction);
         return { p: point(x, y, z), uv: [u, vv] };
       };
-      const polishLevel = Math.max(1, smoothPasses - 1);
+      const polishLevel = isMeshRemake ? Math.max(1, smoothPasses + 1) : Math.max(1, smoothPasses - 1);
       const maxPatchSpan = Math.max(3, 9 - Math.min(6, Math.max(1, smoothPasses)));
       const mix = (a, b, t) => a + (b - a) * t;
       const mixArray = (a, b, t) => a.map((value, index) => mix(value, b[index], t));
@@ -5509,12 +5514,12 @@
           pushQuadPatch(v(x, y + 1, z, x / gridX, z / gridZ), v(x + w, y + 1, z, (x + w) / gridX, z / gridZ), v(x + w, y + 1, z + h, (x + w) / gridX, (z + h) / gridZ), v(x, y + 1, z + h, x / gridX, (z + h) / gridZ), Math.ceil(w / maxPatchSpan), Math.ceil(h / maxPatchSpan));
         });
       }
-      if (polishLevel > 0) relaxWeldedPositions(useSideBodyScaffold ? Math.min(8, polishLevel + 4) : Math.min(5, polishLevel + 1), useSideBodyScaffold ? .24 : .16);
+      if (polishLevel > 0) relaxWeldedPositions(isMeshRemake ? Math.min(7, polishLevel + 2) : (useSideBodyScaffold ? Math.min(8, polishLevel + 4) : Math.min(5, polishLevel + 1)), isMeshRemake ? .22 : (useSideBodyScaffold ? .24 : .16));
       if (positions.length < 9) throw new Error("No sheet foreground was found. Try Threshold or Dark foreground.");
       return {
         positions,
         uvs,
-        meta: { mode: buildMode === "meshRebuild" ? "sheetVoxelMeshRemakeV24" : "viewSheetHeightmapArmTubeSeparationV20", buildMode: buildMode === "meshRebuild" ? "meshRebuild" : "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: true, wideBodyScaffold: true, preservedArmSpanGuides: true, filledScaffoldFaces: true, strongerArmGuides: true, closedInternalSkin: true, calmerScaffoldCarving: true, armTubeSeparation: true, controlledLegGap: true, trimmedHipRuns: true, sheetVoxelMeshRemake: buildMode === "meshRebuild", frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: isMeshRemake ? "sourceLikeSheetMeshV25" : "viewSheetHeightmapArmTubeSeparationV20", buildMode: isMeshRemake ? "meshRebuild" : "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: !isMeshRemake, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: !isMeshRemake, wideBodyScaffold: !isMeshRemake, preservedArmSpanGuides: !isMeshRemake, filledScaffoldFaces: !isMeshRemake, strongerArmGuides: !isMeshRemake, closedInternalSkin: !isMeshRemake, calmerScaffoldCarving: !isMeshRemake, armTubeSeparation: !isMeshRemake, controlledLegGap: !isMeshRemake, trimmedHipRuns: !isMeshRemake, sourceLikeSheetMesh: isMeshRemake, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
