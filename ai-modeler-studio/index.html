@@ -1361,7 +1361,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: side-silhouette body scaffold with arm guides. Version: gen_heightmap_side_body_v12. BoltWorks3D build: t_pose_gen_side_body_v12.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: tall side-body scaffold with raised arm guides. Version: gen_heightmap_tall_body_v13. BoltWorks3D build: t_pose_gen_tall_body_v13.
       </div>
     </footer>
   </main>
@@ -4203,8 +4203,8 @@
       const gridY = Math.max(16, Math.min(128, Math.round(rows)));
       const gridZ = Math.max(10, Math.min(44, Math.round(gridX * .55)));
       const meshH = scale;
-      const meshW = scale * .52;
-      const meshD = Math.max(back, depth, .25) * 2.4;
+      const meshW = scale * .46;
+      const meshD = Math.max(back, depth, .25) * 2.15;
       const frontMask = new Array(gridX * gridY).fill(false);
       const backMask = new Array(gridX * gridY).fill(false);
       const sideMask = new Array(gridZ * gridY).fill(false);
@@ -4381,35 +4381,35 @@
           const end = clamp(Math.round((center + half) * gridX), 1, gridX - 2);
           return end > start ? makeRun(start, end, role) : null;
         };
-        if (ny < .185) {
-          const headWidth = .14 + bell(ny, .105, .06) * .095;
+        if (ny < .145) {
+          const headWidth = .105 + bell(ny, .08, .052) * .075;
           return [runFromNorm(.5, headWidth, "head")].filter(Boolean);
         }
-        if (ny < .255) {
-          const neckToShoulder = smooth(.185, .255, ny);
-          return [runFromNorm(.5, .10 + neckToShoulder * .18, "neck")].filter(Boolean);
+        if (ny < .215) {
+          const neckToShoulder = smooth(.145, .215, ny);
+          return [runFromNorm(.5, .075 + neckToShoulder * .155, "neck")].filter(Boolean);
         }
-        if (ny < .61) {
-          const shoulder = bell(ny, .285, .055) * .12;
-          const chest = bell(ny, .35, .12) * .12;
-          const waistCut = bell(ny, .50, .085) * .09;
-          const hip = bell(ny, .585, .075) * .14;
-          const width = .28 + shoulder + chest - waistCut + hip;
+        if (ny < .535) {
+          const shoulder = bell(ny, .245, .048) * .105;
+          const chest = bell(ny, .315, .105) * .085;
+          const waistCut = bell(ny, .43, .075) * .075;
+          const hip = bell(ny, .515, .065) * .125;
+          const width = .225 + shoulder + chest - waistCut + hip;
           return [runFromNorm(.5, width, "torso")].filter(Boolean);
         }
-        if (ny < .91) {
-          const thigh = bell(ny, .68, .095) * .085;
-          const kneeCut = bell(ny, .76, .04) * .025;
-          const calf = bell(ny, .825, .07) * .05;
-          const ankleCut = bell(ny, .90, .04) * .04;
-          const legWidth = .105 + thigh + calf - kneeCut - ankleCut;
-          const legSpread = .075 + smooth(.61, .72, ny) * .07;
+        if (ny < .945) {
+          const thigh = bell(ny, .62, .105) * .075;
+          const kneeCut = bell(ny, .72, .04) * .026;
+          const calf = bell(ny, .82, .075) * .045;
+          const ankleCut = bell(ny, .925, .045) * .045;
+          const legWidth = .082 + thigh + calf - kneeCut - ankleCut;
+          const legSpread = .06 + smooth(.535, .67, ny) * .08;
           return [
             runFromNorm(.5 - legSpread, legWidth, "leftLeg"),
             runFromNorm(.5 + legSpread, legWidth, "rightLeg")
           ].filter(Boolean);
         }
-        const footWidth = .11 + bell(ny, .94, .026) * .075;
+        const footWidth = .095 + bell(ny, .965, .023) * .07;
         return [
           runFromNorm(.42, footWidth, "leftFoot"),
           runFromNorm(.58, footWidth, "rightFoot")
@@ -4520,8 +4520,8 @@
         }
       };
       const addTPoseArmTubes = () => {
-        const armY = gridY * .302;
-        const shoulderY = gridY * .292;
+        const armY = gridY * .245;
+        const shoulderY = gridY * .235;
         const zCenter = gridZ * .5;
         const addVoxelEllipsoid = (cx, cy, cz, rx, ry, rz) => {
           const minX = Math.max(1, Math.floor(cx - rx * 1.08));
@@ -4541,8 +4541,8 @@
             }
           }
         };
-        const armRadiusY = Math.max(1.2, gridY * .018);
-        const armRadiusZ = Math.max(1.45, gridZ * .07);
+        const armRadiusY = Math.max(1.05, gridY * .014);
+        const armRadiusZ = Math.max(1.25, gridZ * .055);
         const addArmSide = (shoulderX, wristX, sideSign) => {
           const minX = Math.max(1, Math.min(shoulderX, wristX));
           const maxX = Math.min(gridX - 2, Math.max(shoulderX, wristX));
@@ -4552,7 +4552,7 @@
               : (x - shoulderX) / Math.max(1, wristX - shoulderX)));
             const shoulderBlend = 1 - t;
             const wristBlend = t;
-            const yCenter = armY - shoulderBlend * gridY * .012 + wristBlend * gridY * .006;
+            const yCenter = armY - shoulderBlend * gridY * .009 + wristBlend * gridY * .004;
             const radiusY = armRadiusY * (.62 + shoulderBlend * .58 + (t > .78 ? .22 : 0));
             const radiusZ = armRadiusZ * (.62 + shoulderBlend * .5 + (t > .78 ? .18 : 0));
             const yStart = Math.max(1, Math.floor(yCenter - radiusY * 1.25));
@@ -4567,17 +4567,17 @@
               }
             }
           }
-          addVoxelEllipsoid(wristX, armY + gridY * .01, zCenter, gridX * .018, gridY * .026, gridZ * .06);
+          addVoxelEllipsoid(wristX, armY + gridY * .008, zCenter, gridX * .015, gridY * .02, gridZ * .045);
           const fingerStart = wristX + sideSign * Math.max(1, gridX * .012);
           for (let i = -2; i <= 2; i++) {
             const fingerY = armY + i * gridY * .006;
-            addVoxelEllipsoid(fingerStart + sideSign * gridX * .012, fingerY, zCenter + i * gridZ * .012, gridX * .014, gridY * .006, gridZ * .018);
+            addVoxelEllipsoid(fingerStart + sideSign * gridX * .012, fingerY, zCenter + i * gridZ * .011, gridX * .012, gridY * .005, gridZ * .014);
           }
         };
         addArmSide(Math.floor(gridX * .41), Math.floor(gridX * .08), -1);
         addArmSide(Math.ceil(gridX * .59), Math.ceil(gridX * .92), 1);
-        const shoulderRadiusY = Math.max(1.8, gridY * .027);
-        const shoulderRadiusZ = Math.max(1.9, gridZ * .085);
+        const shoulderRadiusY = Math.max(1.45, gridY * .022);
+        const shoulderRadiusZ = Math.max(1.55, gridZ * .068);
         for (let x = Math.floor(gridX * .37); x <= Math.ceil(gridX * .63); x++) {
           for (let y = Math.floor(shoulderY - shoulderRadiusY); y <= Math.ceil(shoulderY + shoulderRadiusY); y++) {
             for (let z = Math.floor(zCenter - shoulderRadiusZ); z <= Math.ceil(zCenter + shoulderRadiusZ); z++) {
@@ -4980,7 +4980,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetHeightmapSideBodyV12", buildMode: "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, sideBodyScaffold: useSideBodyScaffold, armGuideTubes: true, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: "viewSheetHeightmapTallBodyV13", buildMode: "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: true, armGuideTubes: true, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
