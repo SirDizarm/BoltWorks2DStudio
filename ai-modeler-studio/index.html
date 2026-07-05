@@ -1362,7 +1362,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: image-driven silhouette mesh remaker. Version: sheet_silhouette_mesh_v23. BoltWorks3D build: t_pose_sheet_silhouette_mesh_v23.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: sheet voxel mesh remake route. Version: sheet_voxel_mesh_remake_v24. BoltWorks3D build: t_pose_sheet_voxel_mesh_remake_v24.
       </div>
     </footer>
   </main>
@@ -4721,9 +4721,6 @@
 
     function createReliefGeometryFromViewSheet({ imageData, cols, rows, scale, depth, back, threshold, smoothPasses, darkForeground, buildMode = "heightmap", bodyPreset = "auto", sourceName = "" }) {
       const viewRects = detectReliefViewRects(imageData, threshold, darkForeground);
-      if (buildMode === "meshRebuild") {
-        return createSheetSilhouetteMeshV23Geometry({ imageData, viewRects, scale, depth, back, threshold, darkForeground, bodyPreset, sourceName });
-      }
       if (buildMode === "anatomy") {
         return createMannequinSheetRebuildGeometry({ imageData, viewRects, scale, depth, back, threshold, darkForeground, bodyPreset, sourceName });
       }
@@ -5517,7 +5514,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetHeightmapArmTubeSeparationV20", buildMode: "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: true, wideBodyScaffold: true, preservedArmSpanGuides: true, filledScaffoldFaces: true, strongerArmGuides: true, closedInternalSkin: true, calmerScaffoldCarving: true, armTubeSeparation: true, controlledLegGap: true, trimmedHipRuns: true, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: buildMode === "meshRebuild" ? "sheetVoxelMeshRemakeV24" : "viewSheetHeightmapArmTubeSeparationV20", buildMode: buildMode === "meshRebuild" ? "meshRebuild" : "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: true, wideBodyScaffold: true, preservedArmSpanGuides: true, filledScaffoldFaces: true, strongerArmGuides: true, closedInternalSkin: true, calmerScaffoldCarving: true, armTubeSeparation: true, controlledLegGap: true, trimmedHipRuns: true, sheetVoxelMeshRemake: buildMode === "meshRebuild", frontHalfMode, backHalfMode, viewRects }
       };
     }
 
