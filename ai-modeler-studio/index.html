@@ -1331,7 +1331,7 @@
             <select id="reliefBuildModeInput">
               <option value="heightmap">Gen from heightmap</option>
               <option value="smooth">Build from heightmap</option>
-              <option value="anatomy">Rebuild mannequin from sheet</option>
+              <option value="meshRebuild">Remake mesh from sheet</option>
             </select>
           </label>
           <label style="flex:1">Body preset
@@ -1362,7 +1362,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: new mannequin sheet rebuild mode. Version: mannequin_sheet_rebuild_v21. BoltWorks3D build: t_pose_mannequin_sheet_rebuild_v21.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: new surface mesh sheet remaker. Version: sheet_surface_mesh_remake_v22. BoltWorks3D build: t_pose_sheet_surface_mesh_remake_v22.
       </div>
     </footer>
   </main>
@@ -4349,8 +4349,134 @@
       };
     }
 
+    function createSheetSurfaceMeshRemakeGeometry({ scale, depth, back, threshold, darkForeground, imageData, viewRects, bodyPreset = "auto", sourceName = "" }) {
+      const positions = [];
+      const uvs = [];
+      const meshH = scale;
+      const meshW = scale * .86;
+      const meshD = Math.max(back, depth, .25) * 2.25;
+      const sx = meshW / 5.25;
+      const sy = meshH / 6.2;
+      const sz = meshD / 1.95;
+      const p = (x, y, z) => [x * sx, y * sy, z * sz];
+      const pushTri = (a, b, c) => {
+        positions.push(...a.p, ...b.p, ...c.p);
+        uvs.push(...a.uv, ...b.uv, ...c.uv);
+      };
+      const pushQuad = (a, b, c, d) => {
+        pushTri(a, b, c);
+        pushTri(a, c, d);
+      };
+      const nameHint = String(sourceName || "").toLowerCase();
+      const resolvedPreset = bodyPreset === "auto"
+        ? (/female|woman|girl|boob|breast|bust|curvy/.test(nameHint) ? "female" : (/male|man|boy|muscle|pec|bodybuilder/.test(nameHint) ? "male" : "female"))
+        : bodyPreset;
+      const isFemale = resolvedPreset === "female";
+      const isMale = resolvedPreset === "male";
+      const viewRatio = rect => rect && rect.h ? rect.w / rect.h : .26;
+      const sideRatio = Math.max(.12, Math.min(.34, viewRatio(viewRects?.[1])));
+      const depthScale = Math.max(.82, Math.min(1.18, sideRatio / .22));
+      let surfaceSections = 0;
+      const ringPoint = (cx, cy, cz, rx, rz, angle, v = 0) => ({
+        p: p(cx + Math.cos(angle) * rx, cy, cz + Math.sin(angle) * rz),
+        uv: [angle / (Math.PI * 2), v]
+      });
+      const addRingStack = (rings, segments = 28) => {
+        surfaceSections++;
+        for (let r = 0; r < rings.length - 1; r++) {
+          const a = rings[r];
+          const b = rings[r + 1];
+          for (let s = 0; s < segments; s++) {
+            const t0 = (s / segments) * Math.PI * 2;
+            const t1 = ((s + 1) / segments) * Math.PI * 2;
+            pushQuad(
+              ringPoint(a.cx, a.y, a.cz, a.rx, a.rz, t0, r / rings.length),
+              ringPoint(b.cx, b.y, b.cz, b.rx, b.rz, t0, (r + 1) / rings.length),
+              ringPoint(b.cx, b.y, b.cz, b.rx, b.rz, t1, (r + 1) / rings.length),
+              ringPoint(a.cx, a.y, a.cz, a.rx, a.rz, t1, r / rings.length)
+            );
+          }
+        }
+      };
+      const addTubeX = (x0, x1, y0, z0, yRadius0, zRadius0, yRadius1 = yRadius0, zRadius1 = zRadius0, rings = 14, segments = 18) => {
+        const stack = [];
+        for (let i = 0; i <= rings; i++) {
+          const t = i / rings;
+          const cap = Math.sin(Math.max(.08, Math.min(.92, t)) * Math.PI);
+          stack.push({
+            cx: x0 + (x1 - x0) * t,
+            y: y0,
+            cz: z0,
+            rx: (yRadius0 + (yRadius1 - yRadius0) * t) * (.86 + cap * .14),
+            rz: (zRadius0 + (zRadius1 - zRadius0) * t) * (.86 + cap * .14)
+          });
+        }
+        surfaceSections++;
+        for (let r = 0; r < stack.length - 1; r++) {
+          const a = stack[r];
+          const b = stack[r + 1];
+          for (let s = 0; s < segments; s++) {
+            const t0 = (s / segments) * Math.PI * 2;
+            const t1 = ((s + 1) / segments) * Math.PI * 2;
+            const va = (ring, angle, u) => ({ p: p(ring.cx, ring.y + Math.cos(angle) * ring.rx, ring.cz + Math.sin(angle) * ring.rz), uv: [u, angle / (Math.PI * 2)] });
+            pushQuad(va(a, t0, r / stack.length), va(b, t0, (r + 1) / stack.length), va(b, t1, (r + 1) / stack.length), va(a, t1, r / stack.length));
+          }
+        }
+      };
+      const addTubeY = (x0, y0, y1, z0, xRadius0, zRadius0, xRadius1 = xRadius0, zRadius1 = zRadius0, rings = 16, segments = 18) => {
+        const stack = [];
+        for (let i = 0; i <= rings; i++) {
+          const t = i / rings;
+          stack.push({ cx: x0, y: y0 + (y1 - y0) * t, cz: z0, rx: xRadius0 + (xRadius1 - xRadius0) * t, rz: zRadius0 + (zRadius1 - zRadius0) * t });
+        }
+        addRingStack(stack, segments);
+      };
+      const body = [
+        { y: 2.78, cx: 0, cz: 0, rx: .08, rz: .07 * depthScale },
+        { y: 2.52, cx: 0, cz: 0, rx: .29, rz: .25 * depthScale },
+        { y: 2.2, cx: 0, cz: 0, rx: .27, rz: .24 * depthScale },
+        { y: 1.86, cx: 0, cz: 0, rx: .13, rz: .12 * depthScale },
+        { y: 1.42, cx: 0, cz: .02, rx: isMale ? .7 : .62, rz: (isMale ? .35 : .32) * depthScale },
+        { y: .94, cx: 0, cz: .04, rx: isMale ? .66 : .57, rz: (isMale ? .37 : .34) * depthScale },
+        { y: .42, cx: 0, cz: 0, rx: isMale ? .43 : .36, rz: .25 * depthScale },
+        { y: -.05, cx: 0, cz: -.02, rx: isMale ? .48 : .43, rz: .29 * depthScale },
+        { y: -.55, cx: 0, cz: -.04, rx: isFemale ? .66 : .56, rz: (isFemale ? .43 : .37) * depthScale },
+        { y: -.95, cx: 0, cz: -.02, rx: isFemale ? .55 : .47, rz: (isFemale ? .35 : .31) * depthScale }
+      ];
+      addRingStack(body, 32);
+      addTubeX(-.5, -1.22, 1.28, 0, isMale ? .16 : .13, (isMale ? .14 : .12) * depthScale, isMale ? .14 : .115, (isMale ? .12 : .1) * depthScale, 12, 18);
+      addTubeX(-1.22, -2.18, 1.18, 0, isMale ? .13 : .105, (isMale ? .115 : .095) * depthScale, .075, .06 * depthScale, 16, 16);
+      addTubeX(.5, 1.22, 1.28, 0, isMale ? .16 : .13, (isMale ? .14 : .12) * depthScale, isMale ? .14 : .115, (isMale ? .12 : .1) * depthScale, 12, 18);
+      addTubeX(1.22, 2.18, 1.18, 0, isMale ? .13 : .105, (isMale ? .115 : .095) * depthScale, .075, .06 * depthScale, 16, 16);
+      [-1, 1].forEach(side => {
+        const palmX = side * 2.32;
+        addTubeX(side * 2.14, side * 2.48, 1.13, .02, .07, .05 * depthScale, .055, .04 * depthScale, 6, 12);
+        [-2, -1, 0, 1, 2].forEach(i => addTubeX(palmX, side * (2.52 + Math.abs(i) * .025), 1.13 + i * .043, .04 + i * .016, .015, .011 * depthScale, .011, .009 * depthScale, 4, 8));
+      });
+      addTubeY(-.24, -.82, -2.16, .02, isFemale ? .2 : .17, (isFemale ? .17 : .15) * depthScale, .13, .11 * depthScale, 18, 18);
+      addTubeY(.24, -.82, -2.16, .02, isFemale ? .2 : .17, (isFemale ? .17 : .15) * depthScale, .13, .11 * depthScale, 18, 18);
+      addTubeY(-.18, -2.08, -3.02, .03, .13, .11 * depthScale, .09, .09 * depthScale, 14, 16);
+      addTubeY(.18, -2.08, -3.02, .03, .13, .11 * depthScale, .09, .09 * depthScale, 14, 16);
+      addTubeX(-.17, -.42, -3.04, .32, .06, .12 * depthScale, .045, .2 * depthScale, 6, 12);
+      addTubeX(.17, .42, -3.04, .32, .06, .12 * depthScale, .045, .2 * depthScale, 6, 12);
+      if (isFemale) {
+        addTubeX(-.43, -.05, 1.04, .31, .19, .14 * depthScale, .18, .13 * depthScale, 8, 16);
+        addTubeX(.43, .05, 1.04, .31, .19, .14 * depthScale, .18, .13 * depthScale, 8, 16);
+        addTubeX(-.5, -.08, -.72, -.32, .21, .17 * depthScale, .2, .16 * depthScale, 8, 16);
+        addTubeX(.5, .08, -.72, -.32, .21, .17 * depthScale, .2, .16 * depthScale, 8, 16);
+      }
+      return {
+        positions,
+        uvs,
+        meta: { mode: "sheetSurfaceMeshRemakeV22", buildMode: "meshRebuild", bodyPreset, resolvedPreset, sourceName, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, depth, back, viewRects, sideRatio, depthScale, surfaceSections, surfaceMeshExporter: true }
+      };
+    }
+
     function createReliefGeometryFromViewSheet({ imageData, cols, rows, scale, depth, back, threshold, smoothPasses, darkForeground, buildMode = "heightmap", bodyPreset = "auto", sourceName = "" }) {
       const viewRects = detectReliefViewRects(imageData, threshold, darkForeground);
+      if (buildMode === "meshRebuild") {
+        return createSheetSurfaceMeshRemakeGeometry({ imageData, viewRects, scale, depth, back, threshold, darkForeground, bodyPreset, sourceName });
+      }
       if (buildMode === "anatomy") {
         return createMannequinSheetRebuildGeometry({ imageData, viewRects, scale, depth, back, threshold, darkForeground, bodyPreset, sourceName });
       }
