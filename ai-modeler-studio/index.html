@@ -1362,7 +1362,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: source-like female sheet mesh with controlled T-pose arms, centered side depth, calmer source-row noise, and smooth white material. Version: source_like_controlled_arm_mesh_v33. BoltWorks3D build: t_pose_source_like_controlled_arm_mesh_v33.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: source-like female sheet mesh with profile-driven chest and hip depth, anchored anatomy guides, clearer leg split, and controlled T-pose arms. Version: source_like_profile_anatomy_mesh_v34. BoltWorks3D build: t_pose_source_like_profile_anatomy_mesh_v34.
       </div>
     </footer>
   </main>
@@ -5015,17 +5015,17 @@
           runs.push(runFromNorm(.5, .09 + smooth(.135, .205, ny) * .14, "neck"));
         } else if (ny < .535) {
           const shoulder = bell(ny, .235, .048) * .19;
-          const chest = bell(ny, .315, .07) * .075;
-          const waistCut = bell(ny, .445, .075) * .07;
-          const hipLead = bell(ny, .525, .055) * .085;
-          runs.push(runFromNorm(.5, .245 + shoulder + chest - waistCut + hipLead, "torso"));
+          const chest = bell(ny, .315, .07) * .055;
+          const waistCut = bell(ny, .445, .075) * .078;
+          const hipLead = bell(ny, .525, .055) * .072;
+          runs.push(runFromNorm(.5, .238 + shoulder + chest - waistCut + hipLead, "torso"));
         } else if (ny < .925) {
-          const thigh = bell(ny, .63, .095) * .075;
+          const thigh = bell(ny, .63, .095) * .066;
           const kneeCut = bell(ny, .725, .038) * .026;
           const calf = bell(ny, .82, .065) * .038;
-          const ankleCut = bell(ny, .91, .05) * .04;
-          const legWidth = .085 + thigh + calf - kneeCut - ankleCut;
-          const legSpread = .043 + smooth(.535, .68, ny) * .043;
+          const ankleCut = bell(ny, .91, .05) * .044;
+          const legWidth = .078 + thigh + calf - kneeCut - ankleCut;
+          const legSpread = .055 + smooth(.535, .68, ny) * .05;
           runs.push(runFromNorm(.5 - legSpread, legWidth, "leftLeg"));
           runs.push(runFromNorm(.5 + legSpread, legWidth, "rightLeg"));
         } else {
@@ -5052,12 +5052,18 @@
         if (ny < .14) return runFromNorm(.5, .19 + bell(ny, .075, .05) * .09, "head");
         if (ny < .205) return runFromNorm(.5, .105 + smooth(.14, .205, ny) * .09, "neck");
         if (ny < .535) {
-          const chestDepth = bell(ny, .318, .075) * .135;
-          const upperBack = bell(ny, .255, .07) * .065;
-          const waistCut = bell(ny, .445, .08) * .055;
-          return runFromNorm(.5, .235 + chestDepth + upperBack - waistCut, "torso");
+          const chestDepth = bell(ny, .318, .07) * .165;
+          const upperBack = bell(ny, .255, .07) * .038;
+          const waistCut = bell(ny, .445, .08) * .062;
+          const chestCenter = .49 - bell(ny, .318, .07) * .018 + bell(ny, .47, .07) * .012;
+          return runFromNorm(chestCenter, .222 + chestDepth + upperBack - waistCut, "torso");
         }
-        if (ny < .705) return runFromNorm(.5, .27 + bell(ny, .59, .075) * .145, "hip");
+        if (ny < .705) {
+          const buttDepth = bell(ny, .592, .072) * .178;
+          const pelvisDepth = bell(ny, .655, .045) * .044;
+          const hipCenter = .512 + bell(ny, .592, .072) * .035 - bell(ny, .675, .045) * .012;
+          return runFromNorm(hipCenter, .245 + buttDepth + pelvisDepth, "hip");
+        }
         if (ny < .925) {
           const thigh = bell(ny, .705, .09) * .065;
           const calf = bell(ny, .825, .07) * .045;
@@ -5273,11 +5279,11 @@
         addFormEllipsoid(.5, .382, .35, .122, .052, .034, slabGuideScale);
         addFormEllipsoid(.5, .405, .66, .122, .052, .034, slabGuideScale);
       } else {
-        addFormEllipsoid(.39, .31, .16, .055, .036, .07, .82);
-        addFormEllipsoid(.61, .31, .16, .055, .036, .07, .82);
-        addFormEllipsoid(.39, .585, .82, .07, .07, .105, .88);
-        addFormEllipsoid(.61, .585, .82, .07, .07, .105, .88);
-        carveFormGroove(.5, .64, .5, .03, .155, .42);
+        addFormEllipsoid(.38, .318, .17, .036, .024, .038, .34);
+        addFormEllipsoid(.62, .318, .17, .036, .024, .038, .34);
+        addFormEllipsoid(.405, .592, .81, .042, .038, .052, .38);
+        addFormEllipsoid(.595, .592, .81, .042, .038, .052, .38);
+        carveFormGroove(.5, .672, .5, .027, .185, .46);
       }
 
       // Compact side fill: connect short internal gaps across depth/width so thin limbs
@@ -5492,16 +5498,16 @@
         const pairedLobes = Math.max(leftFormLobe, rightFormLobe);
         const breastLowerBand = bell(ny, .383, .024);
         const buttLowerBand = bell(ny, .642, .034);
-        const meshFrontChestVolume = isMeshRemake && view === "front" ? pairedLobes * chestBand * formStrength * 1.18 : 0;
-        const meshUpperChestFlatten = isMeshRemake && view === "front" ? -bell(nx, .5, .24) * upperChestBand * formStrength * .22 : 0;
-        const meshChestCenterGroove = isMeshRemake && view === "front" ? -bell(nx, .5, .03) * chestBand * formStrength * .42 : 0;
-        const meshUnderBreastGroove = isMeshRemake && view === "front" ? -pairedLobes * breastLowerBand * formStrength * .28 : 0;
-        const meshBackButtVolume = isMeshRemake && view === "back" ? pairedLobes * hipBand * formStrength * 1.24 : 0;
-        const meshButtCenterGroove = isMeshRemake && view === "back" ? -bell(nx, .5, .034) * hipBand * formStrength * .54 : 0;
-        const meshUnderButtGroove = isMeshRemake && view === "back" ? -pairedLobes * buttLowerBand * formStrength * .3 : 0;
-        const meshPelvisCenterCut = isMeshRemake && (view === "front" || view === "back") ? -bell(nx, .5, .032) * bell(ny, .675, .075) * formStrength * .82 : 0;
-        const meshSideChestVolume = isMeshRemake && view === "side" ? bell(nx, .18, .08) * chestBand * formStrength * .9 : 0;
-        const meshSideButtVolume = isMeshRemake && view === "side" ? bell(nx, .84, .095) * hipBand * formStrength * 1.08 : 0;
+        const meshFrontChestVolume = isMeshRemake && view === "front" ? pairedLobes * chestBand * formStrength * .7 : 0;
+        const meshUpperChestFlatten = isMeshRemake && view === "front" ? -bell(nx, .5, .24) * upperChestBand * formStrength * .18 : 0;
+        const meshChestCenterGroove = isMeshRemake && view === "front" ? -bell(nx, .5, .026) * chestBand * formStrength * .34 : 0;
+        const meshUnderBreastGroove = isMeshRemake && view === "front" ? -pairedLobes * breastLowerBand * formStrength * .2 : 0;
+        const meshBackButtVolume = isMeshRemake && view === "back" ? pairedLobes * hipBand * formStrength * .78 : 0;
+        const meshButtCenterGroove = isMeshRemake && view === "back" ? -bell(nx, .5, .028) * hipBand * formStrength * .48 : 0;
+        const meshUnderButtGroove = isMeshRemake && view === "back" ? -pairedLobes * buttLowerBand * formStrength * .22 : 0;
+        const meshPelvisCenterCut = isMeshRemake && (view === "front" || view === "back") ? -bell(nx, .5, .026) * bell(ny, .675, .075) * formStrength * .92 : 0;
+        const meshSideChestVolume = isMeshRemake && view === "side" ? bell(nx, .2, .075) * chestBand * formStrength * 1.2 : 0;
+        const meshSideButtVolume = isMeshRemake && view === "side" ? bell(nx, .84, .09) * hipBand * formStrength * 1.28 : 0;
         const frontChestVolume = view === "front" ? pairedLobes * chestBand * formStrength * (isMeshRemake ? .18 : .48) : 0;
         const frontRibVolume = view === "front" ? bell(nx, .5, .20) * torsoBand * formStrength * .022 : 0;
         const backShoulderVolume = view === "back" ? bell(nx, .5, .30) * shoulderBand * formStrength * .09 : 0;
@@ -5679,7 +5685,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: isMeshRemake ? "sourceLikeControlledArmMeshV33" : "viewSheetHeightmapArmTubeSeparationV20", buildMode: isMeshRemake ? "meshRebuild" : "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, sourceLikeMeshScale, guidedFormVolumes: !isMeshRemake, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: !isMeshRemake, wideBodyScaffold: !isMeshRemake, preservedArmSpanGuides: !isMeshRemake, filledScaffoldFaces: !isMeshRemake, strongerArmGuides: !isMeshRemake, closedInternalSkin: !isMeshRemake, calmerScaffoldCarving: !isMeshRemake, armTubeSeparation: !isMeshRemake, controlledLegGap: !isMeshRemake, trimmedHipRuns: !isMeshRemake, sourceLikeSheetMesh: isMeshRemake, splitArmMeshRemake: isMeshRemake, sourceLikeLowerDetailScaleMesh: isMeshRemake, sourceLikeImageAlignedMesh: isMeshRemake, sourceLikeFemaleScaffoldMesh: isMeshRemake, sourceLikeControlledArmMesh: isMeshRemake, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: isMeshRemake ? "sourceLikeProfileAnatomyMeshV34" : "viewSheetHeightmapArmTubeSeparationV20", buildMode: isMeshRemake ? "meshRebuild" : "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, sourceLikeMeshScale, guidedFormVolumes: !isMeshRemake, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: !isMeshRemake, wideBodyScaffold: !isMeshRemake, preservedArmSpanGuides: !isMeshRemake, filledScaffoldFaces: !isMeshRemake, strongerArmGuides: !isMeshRemake, closedInternalSkin: !isMeshRemake, calmerScaffoldCarving: !isMeshRemake, armTubeSeparation: !isMeshRemake, controlledLegGap: !isMeshRemake, trimmedHipRuns: !isMeshRemake, sourceLikeSheetMesh: isMeshRemake, splitArmMeshRemake: isMeshRemake, sourceLikeLowerDetailScaleMesh: isMeshRemake, sourceLikeImageAlignedMesh: isMeshRemake, sourceLikeFemaleScaffoldMesh: isMeshRemake, sourceLikeControlledArmMesh: isMeshRemake, sourceLikeProfileAnatomyMesh: isMeshRemake, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
