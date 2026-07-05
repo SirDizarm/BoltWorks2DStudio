@@ -1361,7 +1361,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: tall side-body scaffold with raised arm guides. Version: gen_heightmap_tall_body_v13. BoltWorks3D build: t_pose_gen_tall_body_v13.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: wider tall body scaffold with full arm span. Version: gen_heightmap_wide_tall_v14. BoltWorks3D build: t_pose_gen_wide_tall_v14.
       </div>
     </footer>
   </main>
@@ -4203,7 +4203,7 @@
       const gridY = Math.max(16, Math.min(128, Math.round(rows)));
       const gridZ = Math.max(10, Math.min(44, Math.round(gridX * .55)));
       const meshH = scale;
-      const meshW = scale * .46;
+      const meshW = scale * .52;
       const meshD = Math.max(back, depth, .25) * 2.15;
       const frontMask = new Array(gridX * gridY).fill(false);
       const backMask = new Array(gridX * gridY).fill(false);
@@ -4382,34 +4382,34 @@
           return end > start ? makeRun(start, end, role) : null;
         };
         if (ny < .145) {
-          const headWidth = .105 + bell(ny, .08, .052) * .075;
+          const headWidth = .12 + bell(ny, .08, .052) * .085;
           return [runFromNorm(.5, headWidth, "head")].filter(Boolean);
         }
         if (ny < .215) {
           const neckToShoulder = smooth(.145, .215, ny);
-          return [runFromNorm(.5, .075 + neckToShoulder * .155, "neck")].filter(Boolean);
+          return [runFromNorm(.5, .085 + neckToShoulder * .185, "neck")].filter(Boolean);
         }
         if (ny < .535) {
-          const shoulder = bell(ny, .245, .048) * .105;
-          const chest = bell(ny, .315, .105) * .085;
-          const waistCut = bell(ny, .43, .075) * .075;
-          const hip = bell(ny, .515, .065) * .125;
-          const width = .225 + shoulder + chest - waistCut + hip;
+          const shoulder = bell(ny, .245, .05) * .15;
+          const chest = bell(ny, .315, .105) * .11;
+          const waistCut = bell(ny, .43, .075) * .06;
+          const hip = bell(ny, .515, .068) * .17;
+          const width = .28 + shoulder + chest - waistCut + hip;
           return [runFromNorm(.5, width, "torso")].filter(Boolean);
         }
         if (ny < .945) {
-          const thigh = bell(ny, .62, .105) * .075;
-          const kneeCut = bell(ny, .72, .04) * .026;
-          const calf = bell(ny, .82, .075) * .045;
-          const ankleCut = bell(ny, .925, .045) * .045;
-          const legWidth = .082 + thigh + calf - kneeCut - ankleCut;
-          const legSpread = .06 + smooth(.535, .67, ny) * .08;
+          const thigh = bell(ny, .62, .105) * .105;
+          const kneeCut = bell(ny, .72, .04) * .025;
+          const calf = bell(ny, .82, .075) * .06;
+          const ankleCut = bell(ny, .925, .045) * .05;
+          const legWidth = .105 + thigh + calf - kneeCut - ankleCut;
+          const legSpread = .075 + smooth(.535, .67, ny) * .095;
           return [
             runFromNorm(.5 - legSpread, legWidth, "leftLeg"),
             runFromNorm(.5 + legSpread, legWidth, "rightLeg")
           ].filter(Boolean);
         }
-        const footWidth = .095 + bell(ny, .965, .023) * .07;
+        const footWidth = .12 + bell(ny, .965, .023) * .085;
         return [
           runFromNorm(.42, footWidth, "leftFoot"),
           runFromNorm(.58, footWidth, "rightFoot")
@@ -4541,8 +4541,8 @@
             }
           }
         };
-        const armRadiusY = Math.max(1.05, gridY * .014);
-        const armRadiusZ = Math.max(1.25, gridZ * .055);
+        const armRadiusY = Math.max(1.25, gridY * .017);
+        const armRadiusZ = Math.max(1.45, gridZ * .065);
         const addArmSide = (shoulderX, wristX, sideSign) => {
           const minX = Math.max(1, Math.min(shoulderX, wristX));
           const maxX = Math.min(gridX - 2, Math.max(shoulderX, wristX));
@@ -4567,24 +4567,24 @@
               }
             }
           }
-          addVoxelEllipsoid(wristX, armY + gridY * .008, zCenter, gridX * .015, gridY * .02, gridZ * .045);
+          addVoxelEllipsoid(wristX, armY + gridY * .008, zCenter, gridX * .02, gridY * .024, gridZ * .055);
           const fingerStart = wristX + sideSign * Math.max(1, gridX * .012);
           for (let i = -2; i <= 2; i++) {
             const fingerY = armY + i * gridY * .006;
-            addVoxelEllipsoid(fingerStart + sideSign * gridX * .012, fingerY, zCenter + i * gridZ * .011, gridX * .012, gridY * .005, gridZ * .014);
+            addVoxelEllipsoid(fingerStart + sideSign * gridX * .014, fingerY, zCenter + i * gridZ * .012, gridX * .014, gridY * .006, gridZ * .017);
           }
         };
-        addArmSide(Math.floor(gridX * .41), Math.floor(gridX * .08), -1);
-        addArmSide(Math.ceil(gridX * .59), Math.ceil(gridX * .92), 1);
-        const shoulderRadiusY = Math.max(1.45, gridY * .022);
-        const shoulderRadiusZ = Math.max(1.55, gridZ * .068);
-        for (let x = Math.floor(gridX * .37); x <= Math.ceil(gridX * .63); x++) {
+        addArmSide(Math.floor(gridX * .38), Math.floor(gridX * .015), -1);
+        addArmSide(Math.ceil(gridX * .62), Math.ceil(gridX * .985), 1);
+        const shoulderRadiusY = Math.max(1.7, gridY * .026);
+        const shoulderRadiusZ = Math.max(1.8, gridZ * .078);
+        for (let x = Math.floor(gridX * .34); x <= Math.ceil(gridX * .66); x++) {
           for (let y = Math.floor(shoulderY - shoulderRadiusY); y <= Math.ceil(shoulderY + shoulderRadiusY); y++) {
             for (let z = Math.floor(zCenter - shoulderRadiusZ); z <= Math.ceil(zCenter + shoulderRadiusZ); z++) {
               const nx = (x + .5) / gridX;
               const shoulderLobe = Math.max(
-                Math.exp(-Math.pow((nx - .41) / .062, 2)),
-                Math.exp(-Math.pow((nx - .59) / .062, 2))
+                Math.exp(-Math.pow((nx - .38) / .072, 2)),
+                Math.exp(-Math.pow((nx - .62) / .072, 2))
               );
               const yPart = Math.pow((y + .5 - shoulderY) / Math.max(.5, shoulderRadiusY), 2);
               const zPart = Math.pow((z + .5 - zCenter) / Math.max(.5, shoulderRadiusZ), 2);
@@ -4657,16 +4657,16 @@
       // upper shoulder area is preserved so arms stay attached where they should.
       const carveArmBodySeparation = () => {
         const softBell = (v, center, radius) => { const d = (v - center) / Math.max(radius, .0001); return Math.max(0, 1 - d * d); };
-        const yMin = Math.max(1, Math.floor(gridY * .292));
-        const yMax = Math.min(gridY - 2, Math.ceil(gridY * .615));
-        const gapCenters = [.318, .682];
-        const gapHalfWidth = detailedHalfSheet ? .017 : .022;
+        const yMin = Math.max(1, Math.floor(gridY * .225));
+        const yMax = Math.min(gridY - 2, Math.ceil(gridY * .42));
+        const gapCenters = [.35, .65];
+        const gapHalfWidth = detailedHalfSheet ? .014 : .02;
         for (let y = yMin; y <= yMax; y++) {
           const ny = (y + .5) / gridY;
-          const upperArmBand = softBell(ny, .345, .074);
-          const forearmBand = softBell(ny, .465, .108);
-          const handBand = softBell(ny, .575, .055) * .72;
-          const preserveShoulder = softBell(ny, .265, .04) * .92;
+          const upperArmBand = softBell(ny, .255, .06);
+          const forearmBand = softBell(ny, .31, .075);
+          const handBand = softBell(ny, .37, .045) * .6;
+          const preserveShoulder = softBell(ny, .225, .035) * .9;
           const cutBand = Math.max(upperArmBand, forearmBand, handBand) * (1 - preserveShoulder);
           if (cutBand < .12) continue;
           for (const cx of gapCenters) {
@@ -4980,7 +4980,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: "viewSheetHeightmapTallBodyV13", buildMode: "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: true, armGuideTubes: true, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: "viewSheetHeightmapWideTallV14", buildMode: "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, guidedFormVolumes: true, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: true, wideBodyScaffold: true, fullArmSpanGuides: true, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
