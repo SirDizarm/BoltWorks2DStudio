@@ -1362,7 +1362,7 @@
         <div id="stateOutput" class="api-note" aria-label="Current scene summary"></div>
       </div>
       <div class="api-note">
-        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: source-like female sheet mesh with separated feet, preserved leg gap, and softer waist blend. Version: v37 source_like_feet_waist_mesh_v37. BoltWorks3D build: t_pose_source_like_feet_waist_mesh_v37.
+        Project JSON saves the editable scene. Save Views exports PNG reference screenshots for AI review. OBJ exports in Roblox stud units. DAE exports in meters using 1 stud = 0.28 meters. Relief generator: source-like female sheet mesh with straighter legs, separated feet, and calmer waist blend. Version: v38 source_like_straight_leg_waist_mesh_v38. BoltWorks3D build: t_pose_source_like_straight_leg_waist_mesh_v38.
       </div>
     </footer>
   </main>
@@ -5016,24 +5016,24 @@
         } else if (ny < .535) {
           const shoulder = bell(ny, .235, .048) * .19;
           const chest = bell(ny, .315, .07) * .055;
-          const waistCut = bell(ny, .445, .088) * .052;
-          const waistBridge = bell(ny, .455, .12) * .026;
+          const waistCut = bell(ny, .445, .088) * .044;
+          const waistBridge = bell(ny, .455, .12) * .036;
           const hipLead = bell(ny, .525, .065) * .084;
-          const torsoWidth = Math.max(.236, .246 + shoulder + chest - waistCut + waistBridge + hipLead);
+          const torsoWidth = Math.max(.248, .25 + shoulder + chest - waistCut + waistBridge + hipLead);
           runs.push(runFromNorm(.5, torsoWidth, "torso"));
         } else if (ny < .925) {
           const thigh = bell(ny, .63, .095) * .066;
           const kneeCut = bell(ny, .725, .038) * .026;
           const calf = bell(ny, .82, .065) * .038;
           const ankleCut = bell(ny, .91, .05) * .044;
-          const legWidth = .072 + thigh + calf - kneeCut - ankleCut;
-          const legSpread = .073 + smooth(.535, .72, ny) * .068;
+          const legWidth = .076 + thigh + calf - kneeCut - ankleCut;
+          const legSpread = .055 + smooth(.76, .91, ny) * .014;
           runs.push(runFromNorm(.5 - legSpread, legWidth, "leftLeg"));
           runs.push(runFromNorm(.5 + legSpread, legWidth, "rightLeg"));
         } else {
-          const foot = .076 + bell(ny, .955, .028) * .052;
-          runs.push(runFromNorm(.412, foot, "leftFoot"));
-          runs.push(runFromNorm(.588, foot, "rightFoot"));
+          const foot = .068 + bell(ny, .955, .028) * .043;
+          runs.push(runFromNorm(.445, foot, "leftFoot"));
+          runs.push(runFromNorm(.555, foot, "rightFoot"));
         }
         const filteredRuns = runs.filter(Boolean);
         return ny >= .535 ? filteredRuns : mergeRuns(filteredRuns);
@@ -5367,7 +5367,7 @@
           carveAt(handX - side * .038, handY + .004, .5, .017, .025, .12, .22);
         }
       };
-      const carveSourceLikeFeetAndWaistV37 = () => {
+      const carveSourceLikeStraightLegWaistV38 = () => {
         const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
         const smooth = (edge0, edge1, value) => {
           const t = clamp((value - edge0) / Math.max(.0001, edge1 - edge0), 0, 1);
@@ -5377,12 +5377,12 @@
           const d = (v - center) / Math.max(radius, .0001);
           return Math.max(0, 1 - d * d);
         };
-        for (let y = Math.max(1, Math.floor(gridY * .565)); y <= Math.min(gridY - 2, Math.ceil(gridY * .985)); y++) {
+        for (let y = Math.max(1, Math.floor(gridY * .60)); y <= Math.min(gridY - 2, Math.ceil(gridY * .985)); y++) {
           const ny = (y + .5) / gridY;
           const footBand = softBell(ny, .955, .05);
-          const thighBand = softBell(ny, .64, .13);
-          const gapWidth = .013 + smooth(.565, .72, ny) * .019 + footBand * .03;
-          const gapDepth = .2 + thighBand * .08 + footBand * .18;
+          const ankleBand = smooth(.80, .925, ny);
+          const gapWidth = .005 + ankleBand * .008 + footBand * .025;
+          const gapDepth = .15 + footBand * .16;
           const minX = Math.max(1, Math.floor((.5 - gapWidth * 1.4) * gridX));
           const maxX = Math.min(gridX - 2, Math.ceil((.5 + gapWidth * 1.4) * gridX));
           const minZ = Math.max(1, Math.floor((.5 - gapDepth) * gridZ));
@@ -5393,7 +5393,7 @@
             for (let z = minZ; z <= maxZ; z++) {
               const nz = (z + .5) / gridZ;
               const zCut = softBell(nz, .5, gapDepth);
-              if (xCut * zCut > (.17 - footBand * .045)) clearVoxel(x, y, z);
+              if (xCut * zCut > (.24 - footBand * .055)) clearVoxel(x, y, z);
             }
           }
         }
@@ -5401,18 +5401,18 @@
           const ny = (y + .5) / gridY;
           const waistBand = softBell(ny, .455, .095);
           if (waistBand < .08) continue;
-          for (const cx of [.322, .678]) {
-            const rx = .022;
+          for (const cx of [.292, .708]) {
+            const rx = .014;
             const minX = Math.max(1, Math.floor((cx - rx * 1.35) * gridX));
             const maxX = Math.min(gridX - 2, Math.ceil((cx + rx * 1.35) * gridX));
             for (let x = minX; x <= maxX; x++) {
               const nx = (x + .5) / gridX;
               const xCut = softBell(nx, cx, rx);
-              if (xCut * waistBand < .12) continue;
+              if (xCut * waistBand < .18) continue;
               for (let z = 1; z < gridZ - 1; z++) {
                 const nz = (z + .5) / gridZ;
-                const zCut = softBell(nz, .5, .34);
-                if (xCut * waistBand * zCut > .34) clearVoxel(x, y, z);
+                const zCut = softBell(nz, .5, .28);
+                if (xCut * waistBand * zCut > .52) clearVoxel(x, y, z);
               }
             }
           }
@@ -5474,7 +5474,7 @@
       closeSkinGaps(isMeshRemake ? 1 : (detailedHalfSheet ? 4 : 1));
       if (isMeshRemake) {
         carveSourceLikeAnatomySeparations();
-        carveSourceLikeFeetAndWaistV37();
+        carveSourceLikeStraightLegWaistV38();
       } else {
         carveArmBodySeparation();
         carveFormGroove(.5, .305, .105, .03, .064, .096);
@@ -5742,7 +5742,7 @@
       return {
         positions,
         uvs,
-        meta: { mode: isMeshRemake ? "sourceLikeFeetWaistMeshV37" : "viewSheetHeightmapArmTubeSeparationV20", buildMode: isMeshRemake ? "meshRebuild" : "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, sourceLikeMeshScale, guidedFormVolumes: !isMeshRemake, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: !isMeshRemake, wideBodyScaffold: !isMeshRemake, preservedArmSpanGuides: !isMeshRemake, filledScaffoldFaces: !isMeshRemake, strongerArmGuides: !isMeshRemake, closedInternalSkin: !isMeshRemake, calmerScaffoldCarving: !isMeshRemake, armTubeSeparation: !isMeshRemake, controlledLegGap: !isMeshRemake, trimmedHipRuns: !isMeshRemake, sourceLikeSheetMesh: isMeshRemake, splitArmMeshRemake: isMeshRemake, sourceLikeLowerDetailScaleMesh: isMeshRemake, sourceLikeImageAlignedMesh: isMeshRemake, sourceLikeFemaleScaffoldMesh: isMeshRemake, sourceLikeControlledArmMesh: isMeshRemake, sourceLikeProfileAnatomyMesh: isMeshRemake, sourceLikeSoftAnatomyMesh: isMeshRemake, sourceLikeBalancedAnatomyMesh: isMeshRemake, sourceLikeFeetWaistMesh: isMeshRemake, frontHalfMode, backHalfMode, viewRects }
+        meta: { mode: isMeshRemake ? "sourceLikeStraightLegWaistMeshV38" : "viewSheetHeightmapArmTubeSeparationV20", buildMode: isMeshRemake ? "meshRebuild" : "heightmap", bodyPreset, sourceName, cols: gridX, rows: gridY, depthSlices: gridZ, sourceW: imageData.width, sourceH: imageData.height, threshold, darkForeground, smoothPasses, polishLevel, depth, back, voxelCount, mergedFaceCount, detailStrength, detailContrastStrength, centerGrooveStrength, formStrength, halfDepthStrength, sourceLikeMeshScale, guidedFormVolumes: !isMeshRemake, sideBodyScaffold: useSideBodyScaffold, tallBodyProportions: !isMeshRemake, wideBodyScaffold: !isMeshRemake, preservedArmSpanGuides: !isMeshRemake, filledScaffoldFaces: !isMeshRemake, strongerArmGuides: !isMeshRemake, closedInternalSkin: !isMeshRemake, calmerScaffoldCarving: !isMeshRemake, armTubeSeparation: !isMeshRemake, controlledLegGap: !isMeshRemake, trimmedHipRuns: !isMeshRemake, sourceLikeSheetMesh: isMeshRemake, splitArmMeshRemake: isMeshRemake, sourceLikeLowerDetailScaleMesh: isMeshRemake, sourceLikeImageAlignedMesh: isMeshRemake, sourceLikeFemaleScaffoldMesh: isMeshRemake, sourceLikeControlledArmMesh: isMeshRemake, sourceLikeProfileAnatomyMesh: isMeshRemake, sourceLikeSoftAnatomyMesh: isMeshRemake, sourceLikeBalancedAnatomyMesh: isMeshRemake, sourceLikeStraightLegWaistMesh: isMeshRemake, frontHalfMode, backHalfMode, viewRects }
       };
     }
 
