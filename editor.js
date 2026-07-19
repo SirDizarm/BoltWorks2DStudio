@@ -4138,7 +4138,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   <canvas id="game"></canvas>
   <div class="hud"><strong>${escapeHtml(projectData.name || "BoltWorks Game")}</strong><span id="sceneName"></span><span id="clock">07:00</span></div>
   <div id="dialogue" class="dialogue"></div>
-  <div class="hint">Move: A/D or arrows · Interact: E / Space / Enter · Crawl: C / Down</div>
+  <div class="hint">Move: A/D or arrows ï¿½ Interact: E / Space / Enter ï¿½ Crawl: C / Down</div>
   <div class="mobile"><div><button data-key="ArrowLeft">?</button><button data-key="ArrowRight">?</button></div><div><button data-key="KeyE">E</button></div></div>
   <script id="boltworks-data" type="application/json">${gameData}</script>
   <script>
@@ -4324,7 +4324,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
     for (const layer of visibleLayers()) { ctx.save(); const off = cameraX*(layer.parallax||1); ctx.translate(-off,0); drawLayerBackdrop(layer,cameraX,viewportW); sceneObjects().filter(o => o.layer === layer.id && !o.alwaysOnTop).forEach(drawObject); ctx.restore(); }
     for (const layer of visibleLayers()) { ctx.save(); const off = cameraX*(layer.parallax||1); ctx.translate(-off,0); sceneObjects().filter(o => o.layer === layer.id && o.alwaysOnTop).forEach(drawObject); ctx.restore(); }
     ctx.save(); ctx.translate(-cameraX,0); particles.forEach(p => { const t=clamp(p.age/p.life,0,1); ctx.globalAlpha=(1-t)*.42; ctx.fillStyle="#d8c99e"; ctx.beginPath(); ctx.ellipse(p.x,p.y,p.size*(1+t),p.size*.45,0,0,Math.PI*2); ctx.fill(); }); drawPlayer(); ctx.restore(); ctx.restore();
-    document.getElementById("sceneName").textContent = (scene().name || "Scene") + (near ? " · E: " + (near.prompt || near.name || "Interact") : "");
+    document.getElementById("sceneName").textContent = (scene().name || "Scene") + (near ? " ï¿½ E: " + (near.prompt || near.name || "Interact") : "");
     const minutes = Math.floor(7*60 + elapsed*8); document.getElementById("clock").textContent = String(Math.floor(minutes/60)%24).padStart(2,"0") + ":" + String(minutes%60).padStart(2,"0") + "  $" + cash;
   }
   function loop(now){ const dt=Math.min(.04,(now-last)/1000||0); last=now; elapsed+=dt; update(dt); draw(); requestAnimationFrame(loop); }
@@ -4417,7 +4417,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   $("#exportProject").onclick = async () => {
     project.updatedAt = Date.now();
     const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
-    const savedName = await saveBlobAs(blob, `${safeProjectName("boltworks-project")}.boltworks`, ".boltworks", "BoltWorks Studio project");
+    const savedName = await saveBlobAs(blob, `${safeProjectName("boltworks-project")}.boltworks`, ".boltworks", "BoltWorks 2D Studio project");
     if (savedName) $("#saveState").textContent = `Project file saved: ${savedName}`;
   };
   if ($("#exportGame")) $("#exportGame").onclick = exportStandaloneGame;
@@ -4428,7 +4428,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       selectionId = null; cameraX = 0; characterFrameIndex = 0; characterState = "standing";
       rebuildAll(); markDirty();
     }
-    catch { alert("That file is not a valid BoltWorks Studio project."); }
+    catch { alert("That file is not a valid BoltWorks 2D Studio project."); }
     event.target.value = "";
   };
 

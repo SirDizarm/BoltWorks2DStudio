@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#141713">
+  <title>BoltWorks Character Animator</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <section id="characterAnimator" class="character-animator active">
+    <header class="studio-header">
+      <div class="title-block">
+        <strong>Character Animator</strong>
+        <span>Standalone BoltWorks character workspace · <b id="saveState">Saved locally</b></span>
+      </div>
+      <div class="studio-actions">
+        <button id="undoCharacterEdit">Undo</button>
+        <button id="exportAnimationSheet" class="accent">Export PNG sheet</button>
+        <button id="exportAnimationWebm" class="accent">Export WebM</button>
+        <button id="exportAnimationHtml" class="accent">Export HTML preview</button>
+        <button id="exportAnimationGif" class="accent">Export GIF</button>
+        <button id="saveCharacterBackup">Save character backup</button>
+        <button id="loadCharacterBackup">Load character backup</button>
+        <input id="characterBackupFile" type="file" accept=".boltchar,.json,.scrap-character,application/json" hidden>
+      </div>
+    </header>
+
+    <div class="animator-layout">
+      <aside class="animator-left">
+        <label>Character name<input id="characterName" type="text" value="BoltWorks Character"></label>
+        <h2>Animation</h2>
+        <select id="animationState"></select>
+        <button id="addCharacterAnimation" class="full quiet">+ Add animation</button>
+        <label>Movement direction
+          <select id="animationDirection">
+            <option value="right">Side view · moving right</option>
+            <option value="left">Side view · moving left</option>
+            <option value="forward">Front view · toward screen</option>
+            <option value="back">Back view · moving away</option>
+          </select>
+        </label>
+        <button id="copyForwardDirection" class="full quiet">Copy front-facing timeline into this view</button>
+        <p id="animationDirectionHint" class="hint">Side view faces right. The game can mirror it when moving left.</p>
+        <label>Playback speed <span id="animationFpsValue">8 fps</span>
+          <input id="animationFps" type="range" min="1" max="20" value="8">
+        </label>
+        <label>Loop mode
+          <select id="animationLoopMode"><option value="normal">Normal: 1,2,3,4</option><option value="pingpong">Ping-pong: 1,2,3,4,3,2</option></select>
+        </label>
+        <h2>Copy timeline</h2>
+        <label>Copy frames from<select id="copyAnimationSource"></select></label>
+        <button id="copyAnimationTimeline" class="full quiet">Copy into current animation</button>
+        <h2>Body layers</h2>
+        <p id="bodyLayerNameHint" class="hint">Layer names are separate for each view.</p>
+        <div id="animatorPartList" class="animator-part-list"></div>
+        <button id="renameCharacterPart" class="full quiet">Rename selected layer for this view</button>
+        <button id="deselectCharacterPart" class="full quiet">Deselect body layer</button>
+        <h2>Asset picker</h2>
+        <input id="characterAssetSearch" class="search-box" type="search" placeholder="Find body parts...">
+        <div id="characterAssetGrid" class="character-asset-grid"></div>
+        <button id="importCharacterAsset" class="full quiet">Import body-part image</button>
+        <input id="characterAssetFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+        <button id="replaceCharacterAsset" class="full quiet">Replace selected image</button>
+        <input id="replaceCharacterAssetFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+        <div class="asset-manage-actions">
+          <button id="renameCharacterAsset">Rename</button>
+          <button id="saveCharacterAssetAs">Save image as…</button>
+        </div>
+        <button id="deleteCharacterAsset" class="full danger">Delete selected image</button>
+        <button id="assignCharacterAsset" class="full accent">Assign selected asset</button>
+        <label class="check"><input id="assignAllCharacterFrames" type="checkbox" checked> Apply to every frame in this animation</label>
+        <button id="resetCharacterPose" class="full quiet">Reset pose layout</button>
+        <button id="clearCharacterPart" class="full quiet">Clear body layer</button>
+      </aside>
+
+      <main class="animator-center">
+        <div class="animator-stage"><canvas id="characterCanvas" width="256" height="320"></canvas></div>
+        <div class="character-zoom-controls">
+          <button id="characterZoomOut">−</button>
+          <label>Zoom <span id="characterZoomValue">100%</span><input id="characterZoom" type="range" min="50" max="500" value="100"></label>
+          <button id="characterZoomIn">+</button><button id="characterZoomReset">100%</button>
+        </div>
+        <details class="guide-panel">
+          <summary>Guide lines</summary>
+          <div class="character-guide-controls">
+            <label class="check"><input id="showCharacterGuides" type="checkbox" checked> Show guide lines</label>
+            <button id="addVerticalGuide">+ Vertical guide</button><button id="addHorizontalGuide">+ Horizontal guide</button>
+            <button id="deleteNearestGuide">Delete selected guide</button><button id="clearCharacterGuides">Clear guides</button>
+            <div id="characterGuideList" class="character-guide-list"></div>
+          </div>
+        </details>
+        <div class="playback-controls">
+          <button id="previousCharacterFrame">&lt;</button><button id="playCharacterAnimation" class="accent">Preview</button>
+          <button id="nextCharacterFrame">&gt;</button><span id="characterFrameLabel">Frame 1 / 1</span>
+        </div>
+        <div id="characterTimeline" class="character-timeline"></div>
+        <div class="frame-actions">
+          <button id="addCharacterFrame">+ New frame</button><button id="duplicateCharacterFrame">Duplicate frame</button>
+          <button id="moveCharacterFrameBack">Move back</button><button id="moveCharacterFrameForward">Move forward</button>
+          <button id="deleteCharacterFrame" class="danger">Delete frame</button>
+        </div>
+      </main>
+
+      <aside class="animator-right">
+        <h2>Selected body layer</h2><strong id="selectedCharacterPart">Torso</strong>
+        <p class="hint">Drag the selected piece on the preview, or use exact controls.</p>
+        <p class="hint slider-help">Tab to any slider, then use ←/↓ and →/↑ for exact steps. The −/+ buttons do the same.</p>
+        <div class="field-row"><label>X<input id="partX" type="number"></label><label>Y<input id="partY" type="number"></label></div>
+        <label>Rotation <span id="partRotationValue">0°</span><input id="partRotation" type="range" min="-180" max="180"></label>
+        <label>Rotation exact<input id="partRotationNumber" type="number" min="-180" max="180"></label>
+        <label>Scale <span id="partScaleValue">100%</span><input id="partScale" type="range" min="1" max="300" value="100"></label>
+        <label>Scale exact %<input id="partScaleNumber" type="number" min="1" max="300"></label>
+        <div class="field-row">
+          <label>Layer width %<input id="partWidthScale" type="number" min="1" max="500" value="100"></label>
+          <label>Layer height %<input id="partHeightScale" type="number" min="1" max="500" value="100"></label>
+        </div>
+        <p class="hint">Width and height stretch this layer independently after uniform scale.</p>
+        <label>Layer light <span id="partBrightnessValue">100%</span><input id="partBrightness" type="range" min="20" max="200" value="100"></label>
+        <label>Layer light exact %<input id="partBrightnessNumber" type="number" min="20" max="200" value="100"></label>
+        <button id="partBrightnessReset" class="full quiet">Reset layer light</button>
+        <label class="check"><input id="partFlip" type="checkbox"> Flip this body part</label>
+        <h2>Sprite sheet cell</h2>
+        <div class="field-row"><label>Columns<input id="partSheetColumns" type="number" min="1" max="64" value="1"></label><label>Rows<input id="partSheetRows" type="number" min="1" max="64" value="1"></label></div>
+        <label>Cell <span id="partSheetCellValue">1 / 1</span><input id="partSheetCell" type="range" min="1" max="1" value="1"></label>
+        <label>Cell exact<input id="partSheetCellNumber" type="number" min="1" max="1" value="1"></label>
+        <h2>Hand / foot bend</h2>
+        <p class="hint">Yellow is the main bend cut; red is the optional finger/toe cut. Bends are stored per frame.</p>
+        <label class="check"><input id="partBendEnabled" type="checkbox"> Bend end part of this layer</label>
+        <label>Bend cut direction<select id="partBendAxis"><option value="bottom">Bottom/end of sprite</option><option value="left">Left end</option><option value="right">Right end</option></select></label>
+        <label>Bend amount <span id="partBendValue">0°</span><input id="partBend" type="range" min="-55" max="55" value="0"></label>
+        <label>Main bend zone from end <span id="partBendZoneValue">25%</span><input id="partBendZone" type="range" min="5" max="70" value="25"></label>
+        <label class="check"><input id="partToeBendEnabled" type="checkbox"> Bend fingers / toe tip too</label>
+        <label>Finger/toe cut direction<select id="partToeCutAxis"><option value="same">Same as main bend</option><option value="bottom">Bottom/end of sprite</option><option value="left">Left end</option><option value="right">Right end</option></select></label>
+        <label>Finger/toe bend <span id="partToeBendValue">0°</span><input id="partToeBend" type="range" min="-90" max="90" value="0"></label>
+        <label>Finger/toe zone from end <span id="partToeBendZoneValue">12%</span><input id="partToeBendZone" type="range" min="1" max="100" value="12"></label>
+        <label>Shoe/end move X <span id="partShoeMoveXValue">0px</span><input id="partShoeMoveX" type="range" min="-120" max="120" value="0"></label>
+        <label>Shoe/end move Y <span id="partShoeMoveYValue">0px</span><input id="partShoeMoveY" type="range" min="-120" max="120" value="0"></label>
+        <div class="nudge-pad"><span>Shoe/end</span><button data-part-nudge="shoe" data-dx="0" data-dy="-1">↑</button><button data-part-nudge="shoe" data-dx="-1" data-dy="0">←</button><button data-part-nudge="shoe" data-dx="1" data-dy="0">→</button><button data-part-nudge="shoe" data-dx="0" data-dy="1">↓</button></div>
+        <label>Finger/toe move X <span id="partToeMoveXValue">0px</span><input id="partToeMoveX" type="range" min="-120" max="120" value="0"></label>
+        <label>Finger/toe move Y <span id="partToeMoveYValue">0px</span><input id="partToeMoveY" type="range" min="-120" max="120" value="0"></label>
+        <div class="nudge-pad"><span>Finger/toe</span><button data-part-nudge="toe" data-dx="0" data-dy="-1">↑</button><button data-part-nudge="toe" data-dx="-1" data-dy="0">←</button><button data-part-nudge="toe" data-dx="1" data-dy="0">→</button><button data-part-nudge="toe" data-dx="0" data-dy="1">↓</button></div>
+        <label class="check"><input id="partShowBendGuides" type="checkbox" checked> Show bend/cut markings</label>
+        <div class="transform-buttons"><button id="copyPartTransform">Copy transform</button><button id="pastePartTransform">Paste transform</button><button id="partReset">Reset</button></div>
+        <p id="partTransformClipboardStatus" class="hint">No copied transform yet.</p>
+        <h2>Layer order</h2><div id="partLayerOrder" class="part-layer-order"></div>
+        <div class="transform-buttons"><button id="partLayerBack">Move back</button><button id="partLayerForward">Move forward</button><button id="partLayerBottom">Send bottom</button><button id="partLayerTop">Bring top</button></div>
+        <h2>Lock movement</h2><div id="partLockList" class="part-lock-list"></div>
+        <div class="transform-buttons"><button id="partRotateLeft">Left 15°</button><button id="partRotateRight">Right 15°</button></div>
+        <h2>Output size</h2>
+        <div class="field-row"><label>Width<input id="characterWidth" type="number" min="64" max="1024"></label><label>Height<input id="characterHeight" type="number" min="64" max="1024"></label></div>
+      </aside>
+    </div>
+  </section>
+  <script src="character-animator.js"></script>
+</body>
+</html>

@@ -1,8 +1,8 @@
-﻿# BoltWorks Studio
+# BoltWorks 2D Studio
 
-![BoltWorks Studio logo](branding/boltworks-studio-logo.png)
+![BoltWorks 2D Studio logo](branding/boltworks-studio-logo.png)
 
-**BoltWorks Studio** is a browser-based 2D creation toolkit for building layered side-scroller games, preparing sprite assets, assembling character animations, and exporting playable game builds.
+**BoltWorks 2D Studio** is a browser-based 2D creation toolkit for building layered side-scroller games, preparing sprite assets, assembling character animations, and exporting playable game builds.
 
 It started alongside **Scrapyard Story**, but the editor itself is being rebuilt as a reusable tool for other 2D projects too.
 
@@ -17,20 +17,20 @@ The active rebuild is now the modular HTML/JavaScript editor in:
 
 The first goal is to recreate the best parts of the original single-file HTML prototype, but split into small maintainable modules instead of one giant JavaScript file.
 
-The C# WinForms experiment has been removed. BoltWorks Studio is now focused on the modular web editor, with the preserved legacy editor kept as a working reference while features are migrated.
+The C# WinForms experiment has been removed. BoltWorks 2D Studio is now focused on the modular web editor, with the preserved legacy editor kept as a working reference while features are migrated.
 
 ## Run the modular web editor
 
 Open:
 
 ```text
-D:\BoltWorksStudio\web\editor\index.html
+D:\Game\BoltWorks2DStudio\web\editor\index.html
 ```
 
 or run:
 
 ```text
-D:\BoltWorksStudio\START_WEB_EDITOR.cmd
+D:\Game\BoltWorks2DStudio\START_WEB_EDITOR.cmd
 ```
 
 ## Modules being rebuilt
@@ -52,7 +52,7 @@ web/legacy-working-editor/index.html
 Run it with:
 
 ```text
-D:\BoltWorksStudio\START_LEGACY_WORKING_EDITOR.cmd
+D:\Game\BoltWorks2DStudio\START_LEGACY_WORKING_EDITOR.cmd
 ```
 
 This legacy copy contains the old full Asset Studio and Character Animator behavior while those systems are being ported into the new modular editor. The new editor also has an **Open Legacy Editor** button in the top bar for quick access.
@@ -77,7 +77,7 @@ The modular rebuild will keep the same general idea:
 
 ## License / rights
 
-Copyright (c) 2026 SirDizarm.
+Copyright (c) 2026 Daniel Rydin.
 
 All rights reserved.
 

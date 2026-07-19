@@ -6131,7 +6131,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
   $("#exportProject").onclick = async () => {
     project.updatedAt = Date.now();
     const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
-    const savedName = await saveBlobAs(blob, `${safeProjectName("boltworks-project")}.boltworks`, ".boltworks", "BoltWorks Studio project");
+    const savedName = await saveBlobAs(blob, `${safeProjectName("boltworks-project")}.boltworks`, ".boltworks", "BoltWorks 2D Studio project");
     if (savedName) $("#saveState").textContent = `Project file saved: ${savedName}`;
   };
   if ($("#exportGame")) $("#exportGame").onclick = exportStandaloneGame;
@@ -6142,7 +6142,7 @@ if (progress >= 0 && progress < 1 && api.playerBlocksBus()) {
       selectionId = null; cameraX = 0; characterFrameIndex = 0; characterState = "standing";
       rebuildAll(); markDirty();
     }
-    catch { alert("That file is not a valid BoltWorks Studio project."); }
+    catch { alert("That file is not a valid BoltWorks 2D Studio project."); }
     event.target.value = "";
   };
 
