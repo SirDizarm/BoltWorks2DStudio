@@ -515,3 +515,18 @@ button.danger { color: #ffc2b9; border-color: #6b3932; }
 .character-guide-row input {
   min-width: 0;
 }
+
+.app-copyright {
+  position: fixed;
+  right: 12px;
+  bottom: 8px;
+  z-index: 10000;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 4px;
+  background: rgba(8, 10, 8, .78);
+  color: rgba(220, 227, 212, .62);
+  font-size: 10px;
+  letter-spacing: .03em;
+  pointer-events: none;
+}
