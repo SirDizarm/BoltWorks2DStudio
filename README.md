@@ -75,13 +75,9 @@ The modular rebuild will keep the same general idea:
 - Imported and extracted images can be embedded in project data, so a project can move between computers.
 - Assets are only written as separate PNG files when an explicit download/export action is used.
 
-## License / rights
+## License and rights
 
 Copyright (c) 2026 Daniel Rydin.
 
-All rights reserved.
-
-This project is private work-in-progress software. No permission is granted to copy, redistribute, sell, publish, sublicense, or reuse the code, art, branding, project files, or assets unless explicit written permission is given by the copyright holder.
-
-The license may change in the future if the project is released publicly or sold.
+Source code is licensed under the [Apache License 2.0](LICENSE). BoltWorks branding and visual assets are not part of that license grant; see [TRADEMARKS.md](TRADEMARKS.md) and [ASSET-LICENSE.md](ASSET-LICENSE.md).
 
